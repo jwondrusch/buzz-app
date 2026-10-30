@@ -1884,6 +1884,7 @@ export class AgentsService extends Service implements Agents {
         },
       },
       activity: localActivity,
+      channel: (agent, event) => this.channelOf(agent, event),
       soloChat: (agent, channel, signal) =>
         soloChat(() => this.relay(agent.key), agent.owner, channel, signal),
       remembered: (key, slug, body) => this.coreMemory.wrote(key, slug, body),
