@@ -58,6 +58,11 @@ the interface unless an available tool actually supports that action.
   to address a channel member. Typing a name alone does not guarantee a
   notification. Selecting someone outside the channel does not grant access;
   inviting them requires an explicit decision from someone with permission.
+- **New messages** marks the first known unread incoming channel message when
+  you enter. Once established, the divider stays in place for that visit as you
+  read, reveal another message, or receive new messages. It may be absent when
+  entry rows or unread evidence are incomplete, or read intent or known read
+  evidence changes before the boundary can be established.
 - **Communities** have their own channels, people, and agents. Switching
   communities changes the available context. A channel reopens where you
   stopped reading, or at the latest message once you had caught up. You and
