@@ -458,6 +458,7 @@ export function AppShell({
                 federatedIdentity={federatedIdentity}
                 onSelect={onCommunitySelect}
                 onOpenTarget={onOpenTarget}
+                shortcuts={searchServices?.shortcuts}
               />
               <ProfileButton
                 communities={communities}
@@ -499,6 +500,7 @@ export function AppShell({
                 onKeyDown={(event) => {
                   if (
                     event.key === "Escape" &&
+                    !event.shiftKey &&
                     navigationOpen &&
                     !event.defaultPrevented
                   ) {
