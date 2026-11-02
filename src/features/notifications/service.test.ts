@@ -228,6 +228,37 @@ it("installed plugins share the host policy and stale producer handles are rejec
   t.clicks[0]?.();
   expect(t.navigation.navigation.snapshot().entry.target).toEqual(target);
 });
+it("plugin gates hold alerts until removed or the plugin is disabled", async () => {
+  const t = setup();
+  let gate: Notifications["gate"] | undefined;
+  t.install({
+    inject: ["notifications"],
+    apply(ctx) {
+      gate = (value) => ctx.notifications.gate(value);
+      ctx.notifications.gate({
+        id: "broken",
+        allows() {
+          throw new Error("skipped");
+        },
+      });
+    },
+  });
+  await vi.waitFor(() => expect(gate).toBeDefined());
+  const remove = gate?.({
+    id: "solo",
+    allows: (value) => value.kind === "conversation",
+  });
+  expect(t.service.gated(target)).toBe(false);
+  expect(await t.submit("held")).toBe(false);
+  remove?.();
+  expect(t.service.gated(target)).toBe(true);
+  gate?.({ id: "solo", allows: () => false });
+  expect(t.service.gated(target)).toBe(false);
+  t.disable();
+  await flush();
+  expect(t.service.gated(target)).toBe(true);
+  expect(await t.submit("released")).toBe(true);
+});
 it("off takes effect despite storage failure and account preferences stay separate", () => {
   const t = setup();
   t.service.updatePreferences({ categories: { mention: false }, sound: false });

@@ -182,6 +182,13 @@ the interface unless an available tool actually supports that action.
   no setup or token. Without such a plugin there are no tools to
   offer; do not promise them.
 - Some desktop plugins can upload images you provide to services they declare.
+- **Focus**, when its optional plugin is on, is in the profile menu. For a
+  chosen time it shows only Solo chats in the sidebar and lets only Solo chats
+  show banners, play sounds or light the Dock dot. It sets 🔭 Focusing as the
+  status in the selected community and restores the earlier status afterwards
+  if the 🔭 status is still current. Focus is saved per device and ends at its
+  end time or with **End**. Other conversations keep their unread state;
+  links and search can still open them.
 - **Attention**, when available, lets agents use Interests, watches, and timers
   to follow work. Its tab in an agent's profile shows what that agent is watching
   and whether Attention is on for this device. A mention can still wake an agent
