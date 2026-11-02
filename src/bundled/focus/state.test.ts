@@ -37,11 +37,22 @@ it("starts, persists and ends itself at the deadline", () => {
   focus.subscribe(listener);
   focus.start(at(1800));
   expect(focus.snapshot().until).toBe(at(1800));
-  expect(JSON.parse(values.get(FOCUS_KEY) ?? "")).toEqual({ until: at(1800) });
+  expect(JSON.parse(values.get(FOCUS_KEY) ?? "")).toEqual({
+    until: at(1800),
+    mode: "isolated",
+  });
   vi.advanceTimersByTime(1800_000);
   expect(focus.snapshot().until).toBeUndefined();
   expect(values.has(FOCUS_KEY)).toBe(false);
   expect(listener).toHaveBeenCalledTimes(2);
+});
+
+it("keeps the chosen mode across a restart, defaulting to Solo only", () => {
+  const { host, values } = browser();
+  createFocus(host).start(at(60), "sidebar");
+  expect(createFocus(host).snapshot().mode).toBe("sidebar");
+  values.set(FOCUS_KEY, JSON.stringify({ until: at(60), mode: "other" }));
+  expect(createFocus(host).snapshot().mode).toBe("isolated");
 });
 
 it("rejects a deadline that is not in the future", () => {

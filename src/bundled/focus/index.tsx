@@ -4,11 +4,12 @@ import {
   FocusBanner,
   FocusDialog,
   lastFocusDuration,
+  lastFocusMode,
   startFocus,
 } from "./FocusDialog";
 import { createHeld } from "./held";
 import { HELD_PAGE, HeldPage } from "./HeldPage";
-import { createFocus } from "./state";
+import { createFocus, type FocusMode } from "./state";
 import { bindFocusStatus, soloConversation } from "./status";
 
 export const inject = [
@@ -55,6 +56,7 @@ export const apply: PluginModule["apply"] = (ctx) => {
   // disabling the plugin releases both even mid-Focus.
   ctx.effect(() => {
     let release: (() => void) | undefined;
+    let active: FocusMode | undefined;
     let sending = false;
     // Once Focus is off, say how many alerts wait: when it ends, or on the
     // next start if it ended while Buzz was closed.
@@ -78,25 +80,30 @@ export const apply: PluginModule["apply"] = (ctx) => {
         });
     };
     const sync = () => {
-      const next = focus.snapshot().until;
-      if (next !== undefined && !release) {
+      const { until, mode } = focus.snapshot();
+      const next = until === undefined ? undefined : mode;
+      if (next !== active) {
+        release?.();
+        release = undefined;
+      }
+      active = next;
+      if (next && !release) {
         const ungate = ctx.notifications.gate({
           id: "solo",
           allows: (target) => soloConversation(relay, target),
           hold: (alert) => held.add(alert),
         });
+        // Quiet sidebar hides the rest but still lets search and links open it.
         const unrestrict = ctx.sidebarScope.restrict({
           id: "focus",
           scope: "solo",
+          reach: next === "sidebar" ? "any" : "solo",
           banner,
         });
         release = () => {
           ungate();
           unrestrict();
         };
-      } else if (next === undefined && release) {
-        release();
-        release = undefined;
       }
       summarize();
     };
@@ -125,7 +132,7 @@ export const apply: PluginModule["apply"] = (ctx) => {
     allowInEditable: true,
     run: () => {
       if (focus.snapshot().until !== undefined) focus.end();
-      else startFocus(focus, lastFocusDuration());
+      else startFocus(focus, lastFocusDuration(), lastFocusMode());
     },
   });
   ctx.accountActions.register({

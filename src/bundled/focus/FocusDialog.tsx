@@ -13,7 +13,7 @@ import {
 import { StatusExpiration } from "../../features/user-status/StatusExpiration";
 import { statusDeadline } from "../../features/user-status/status-duration";
 import type { Held } from "./held";
-import type { Focus } from "./state";
+import type { Focus, FocusMode } from "./state";
 import styles from "./Focus.module.css";
 
 export const focusDurations = [
@@ -43,10 +43,35 @@ function rememberFocusDuration(duration: Preset) {
     globalThis.localStorage?.setItem(FOCUS_DURATION_KEY, duration);
   } catch {}
 }
+export const focusModes = [
+  ["isolated", "Solo only"],
+  ["sidebar", "Quiet sidebar"],
+] as const;
+const modeHelp: Record<FocusMode, string> = {
+  isolated:
+    "Only Solo chats are shown and open. Other alerts are saved for when you're ready.",
+  sidebar:
+    "Only Solo chats are shown in the sidebar and alert you. Search and links still open anything else.",
+};
+/** The last mode chosen, which the shortcut reuses. */
+export const FOCUS_MODE_KEY = "buzz-focus-mode.v1";
+export function lastFocusMode(): FocusMode {
+  try {
+    if (globalThis.localStorage?.getItem(FOCUS_MODE_KEY) === "sidebar")
+      return "sidebar";
+  } catch {}
+  return "isolated";
+}
+function rememberFocusMode(mode: FocusMode) {
+  try {
+    globalThis.localStorage?.setItem(FOCUS_MODE_KEY, mode);
+  } catch {}
+}
 /** Start Focus for a preset; the shortcut and the dialog share it. */
-export function startFocus(focus: Focus, duration: Preset) {
-  focus.start(statusDeadline(duration, Math.floor(Date.now() / 1000)));
+export function startFocus(focus: Focus, duration: Preset, mode: FocusMode) {
+  focus.start(statusDeadline(duration, Math.floor(Date.now() / 1000)), mode);
   rememberFocusDuration(duration);
+  rememberFocusMode(mode);
 }
 
 export function useHeldCount(held: Held) {
@@ -109,6 +134,7 @@ export function FocusDialog({
   const state = useFocus(focus);
   const count = useHeldCount(held);
   const [duration, setDuration] = useState<Duration>(lastFocusDuration);
+  const [mode, setMode] = useState<FocusMode>(lastFocusMode);
   const [custom, setCustom] = useState(() => {
     const date = new Date(Date.now() + 3600_000);
     date.setMinutes(date.getMinutes() < 30 ? 30 : 60, 0, 0);
@@ -119,9 +145,10 @@ export function FocusDialog({
   const on = state.until !== undefined;
   const start = () => {
     try {
-      if (duration === "custom")
-        focus.start(Math.floor(custom.getTime() / 1000));
-      else startFocus(focus, duration);
+      if (duration === "custom") {
+        focus.start(Math.floor(custom.getTime() / 1000), mode);
+        rememberFocusMode(mode);
+      } else startFocus(focus, duration, mode);
       close();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -129,6 +156,7 @@ export function FocusDialog({
   };
   const durationLabel =
     focusDurations.find(([value]) => value === duration)?.[1] ?? "";
+  const modeLabel = focusModes.find(([value]) => value === mode)?.[1] ?? "";
   return (
     <Dialog
       size="compact"
@@ -138,8 +166,8 @@ export function FocusDialog({
       closeLabel="Close Focus"
       description={
         on
-          ? `Focusing until ${focusUntilLabel(state.until as number)}. Only Solo chats are shown and can alert you.`
-          : "Show only your Solo chats. Other alerts are saved for when you're ready, and unread messages wait for you."
+          ? `Focusing until ${focusUntilLabel(state.until as number)}. ${modeHelp[state.mode]}`
+          : `${modeHelp[mode]} Unread messages wait for you.`
       }
       actions={
         on ? (
@@ -161,6 +189,30 @@ export function FocusDialog({
     >
       {!on && (
         <div className={styles.fields}>
+          <div className={styles.section}>
+            <span className="text-label-sm text-subtle">Mode</span>
+            <MenuRoot>
+              <MenuTrigger
+                aria-label={`Mode: ${modeLabel}`}
+                render={<FieldButton />}
+              >
+                {modeLabel}
+              </MenuTrigger>
+              <MenuPopup align="end">
+                <MenuRadioGroup
+                  value={mode}
+                  onValueChange={(value) => setMode(value as FocusMode)}
+                  aria-label="Mode"
+                >
+                  {focusModes.map(([value, label]) => (
+                    <MenuRadioItem key={value} value={value} closeOnClick>
+                      {label}
+                    </MenuRadioItem>
+                  ))}
+                </MenuRadioGroup>
+              </MenuPopup>
+            </MenuRoot>
+          </div>
           <div className={styles.section}>
             <span className="text-label-sm text-subtle">Duration</span>
             <MenuRoot>

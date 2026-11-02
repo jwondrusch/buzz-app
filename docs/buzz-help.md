@@ -187,8 +187,10 @@ the interface unless an available tool actually supports that action.
   show banners, play sounds or light the Dock dot. It sets 🔭 Focusing as the
   status in the selected community and restores the earlier status afterwards
   if the 🔭 status is still current. Focus is saved per device and ends at its
-  end time or with **End**, and ⌘⇧F (Ctrl+Shift+F) toggles it. Links,
-  search and alert clicks reach only Solo chats meanwhile. Other alerts are
+  end time or with **End**, and ⌘⇧F (Ctrl+Shift+F) toggles it with the last
+  mode and length. In **Solo only** mode, links, search and alert clicks reach
+  only Solo chats meanwhile. In **Quiet sidebar** mode they still open any
+  conversation; only the sidebar and alerts are limited to Solo. Other alerts are
   saved on the **Focus alerts** page, and a notification says how many wait
   when Focus ends. Other conversations keep their unread state. Turning the
   plugin off ends Focus and restores the earlier status.

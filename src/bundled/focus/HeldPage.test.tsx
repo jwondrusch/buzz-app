@@ -61,3 +61,31 @@ it("lists held alerts, opens one and removes it, and clears the rest", async () 
   held.dispose();
   focus.dispose();
 });
+
+it("opens held alerts during Quiet sidebar Focus, which lets them open", async () => {
+  const user = userEvent.setup();
+  const held = createHeld();
+  held.add({
+    category: "mention",
+    label: "Mentions",
+    target,
+    title: "Ana",
+    body: "Ship it?",
+    at: Date.now(),
+  });
+  const open = vi.fn(async () => {});
+  const focus = createFocus();
+  focus.start(Math.floor(Date.now() / 1000) + 600, "sidebar");
+  render(
+    <HeldPage
+      held={held}
+      focus={focus}
+      navigation={{ open } as unknown as Navigation}
+    />,
+  );
+  expect(screen.queryByText("These open when Focus ends.")).toBeNull();
+  await user.click(screen.getByRole("button", { name: /Ana/ }));
+  expect(open).toHaveBeenCalledWith(target);
+  held.dispose();
+  focus.dispose();
+});

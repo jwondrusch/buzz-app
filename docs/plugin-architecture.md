@@ -342,17 +342,20 @@ ctx.reflect.get("sidebarSections")?.register({
 
 ### Solo-only sidebar
 
-`sidebarScope.restrict({ id, scope: "solo", banner })` shows only the Solo
+`sidebarScope.restrict({ id, scope: "solo", reach?, banner })` shows only the Solo
 inventory while it is registered. The All/Solo/Team tabs and page destinations
 give way to the plugin's `banner` component, and the person's saved tab returns
 when the last restriction is removed. It returns a remover; disable, replacement
 and teardown remove it too, so a restriction can never outlive its plugin. A
 banner that throws renders nothing and leaves the sidebar usable. While any
-restriction is registered, Channels opens only Solo conversations: a link,
-search result or alert click to another one completes as unavailable with an
-in-page notice, the default conversation is a Solo chat, and the saved selection
-is left alone. Search lists only Solo chats and their messages. Focus is the
-first caller and registers its restriction only while Focus is on.
+restriction is registered, the default conversation is a Solo chat and the
+saved selection is left alone. `reach` says what may still open. With `"solo"`,
+the default, Channels opens only Solo conversations: a link, search result or
+alert click to another one completes as unavailable with an in-page notice, and
+search lists only Solo chats and their messages. With `"any"` the sidebar is
+still Solo-only but links and search open anything. Any `"solo"` restriction
+wins over `"any"` ones. Focus is the first caller and registers its restriction
+only while Focus is on, with the reach of the mode the person chose.
 
 A plugin exports `inject` and `apply(ctx)`. Pages register with
 `ctx.pages.register({ id, title, layout?, companion?, primary?, placement?, icon?, component, sidebar? })`. Panels register with

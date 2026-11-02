@@ -5,7 +5,10 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { AccountActionsService } from "../../features/account-actions/service";
-import { SidebarScopeService } from "../../features/channel-navigation/sidebar-scope-service";
+import {
+  SidebarScopeService,
+  soloReach,
+} from "../../features/channel-navigation/sidebar-scope-service";
 import { provideNavigation } from "../../features/navigation/service";
 import type { OpenTarget } from "../../features/navigation/targets";
 import { createNotificationPreferences } from "../../features/notifications/preferences";
@@ -163,6 +166,21 @@ it("resumes a saved Focus, lets only Solo alert, and releases everything on End"
   expect(t.sidebarScope.snapshot()).toEqual([]);
   expect(t.notifications.gated(conversation("team"))).toBe(true);
   expect(localStorage.getItem(FOCUS_KEY)).toBeNull();
+});
+
+it("Quiet sidebar hides the rest of the sidebar but lets it open", async () => {
+  const until = Math.floor(Date.now() / 1000) + 600;
+  localStorage.setItem(FOCUS_KEY, JSON.stringify({ until, mode: "sidebar" }));
+  const t = setup();
+  t.enable();
+  await vi.waitFor(() => expect(t.sidebarScope.snapshot()).toHaveLength(1));
+  expect(t.sidebarScope.snapshot()[0]).toMatchObject({
+    scope: "solo",
+    reach: "any",
+  });
+  expect(soloReach(t.sidebarScope)).toBe(false);
+  // Alerts from outside Solo still wait.
+  expect(t.notifications.gated(conversation("team"))).toBe(false);
 });
 
 it("disabling the plugin mid-Focus releases everything and restores the earlier status", async () => {

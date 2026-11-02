@@ -11,6 +11,9 @@ export type SidebarRestriction = Readonly<{
   id: string;
   scope: "solo";
   banner: ComponentType;
+  /** `solo` (the default) also keeps other conversations from opening;
+   * `any` hides them from the sidebar only, so search and links still work. */
+  reach?: "solo" | "any";
 }>;
 export type RegisteredSidebarRestriction = Contribution<SidebarRestriction>;
 export type SidebarScope = Readonly<{
@@ -40,9 +43,17 @@ export class SidebarScopeService extends Service implements SidebarScope {
       typeof restriction.id !== "string" ||
       !/^[a-z0-9][a-z0-9._-]*$/.test(restriction.id) ||
       restriction.scope !== "solo" ||
+      (restriction.reach !== undefined &&
+        restriction.reach !== "solo" &&
+        restriction.reach !== "any") ||
       typeof restriction.banner !== "function"
     )
       throw new Error("A sidebar restriction needs an id, scope and banner");
     return this.restrictions.register(this.ctx, restriction);
   }
+}
+
+/** Whether a restriction keeps conversations outside Solo from opening. */
+export function soloReach(scope: SidebarScope | undefined) {
+  return !!scope?.snapshot().some((item) => item.reach !== "any");
 }

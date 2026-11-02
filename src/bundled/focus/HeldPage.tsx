@@ -22,8 +22,9 @@ export const HELD_PAGE = Object.freeze({
   pageId: "held",
 } as const);
 
-/** Alerts Focus kept for later. Opening one removes it from the list; they
- * open only once Focus ends, since Focus keeps their conversations closed. */
+/** Alerts Focus kept for later. Opening one removes it from the list. In
+ * Solo only mode they open once Focus ends, since it keeps their
+ * conversations closed; Quiet sidebar lets them open any time. */
 export function HeldPage({
   held,
   focus,
@@ -35,7 +36,8 @@ export function HeldPage({
 }) {
   const items = useSyncExternalStore(held.subscribe, held.snapshot);
   const error = useSyncExternalStore(held.subscribe, held.error);
-  const focusing = useFocus(focus).until !== undefined;
+  const state = useFocus(focus);
+  const focusing = state.until !== undefined && state.mode === "isolated";
   const open = (item: KeptAlert) => {
     held.remove(item);
     void navigation.open(item.target);

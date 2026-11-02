@@ -3,7 +3,12 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
-import { FOCUS_DURATION_KEY, FocusDialog } from "./FocusDialog";
+import {
+  FOCUS_DURATION_KEY,
+  FOCUS_MODE_KEY,
+  FocusDialog,
+  lastFocusMode,
+} from "./FocusDialog";
 import { createHeld } from "./held";
 import { createFocus } from "./state";
 
@@ -42,6 +47,35 @@ it("starts Focus for the chosen duration and offers End while it is on", async (
   expect(screen.getByText(/^Focusing until/)).toBeVisible();
   await user.click(screen.getByRole("button", { name: "End focus" }));
   expect(focus.snapshot().until).toBeUndefined();
+  focus.dispose();
+});
+
+it("starts in the chosen mode and remembers it for next time", async () => {
+  const user = userEvent.setup();
+  const focus = createFocus();
+  const dialog = (
+    <FocusDialog
+      open
+      onOpenChange={() => {}}
+      focus={focus}
+      held={createHeld()}
+      onReview={() => {}}
+    />
+  );
+  const view = render(dialog);
+  await user.click(screen.getByRole("button", { name: "Mode: Solo only" }));
+  await user.click(
+    await screen.findByRole("menuitemradio", { name: "Quiet sidebar" }),
+  );
+  expect(screen.getByText(/Search and links still open/)).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "Start focus" }));
+  expect(focus.snapshot().mode).toBe("sidebar");
+  expect(localStorage.getItem(FOCUS_MODE_KEY)).toBe("sidebar");
+  expect(lastFocusMode()).toBe("sidebar");
+  view.rerender(dialog);
+  expect(screen.getByText(/^Focusing until/)).toHaveTextContent(
+    "Search and links still open",
+  );
   focus.dispose();
 });
 

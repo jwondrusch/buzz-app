@@ -10,7 +10,10 @@ import { LoadingRegion } from "../../shared/design-system/ui/LoadingRegion";
 import { TypingDots } from "../../shared/design-system/ui/TypingDots";
 import { profileActivityViewTarget } from "../../features/profiles/target";
 import type { Agents } from "../../features/agents/service";
-import type { SidebarScope } from "../../features/channel-navigation/sidebar-scope-service";
+import {
+  type SidebarScope,
+  soloReach,
+} from "../../features/channel-navigation/sidebar-scope-service";
 import { SoloDraft } from "../../features/solo/SoloDraft";
 import { useChannelNavigation } from "../../features/channel-navigation/ChannelNavigationState";
 import { soloSuccessor } from "../../features/channel-navigation/solo-successor";
@@ -162,11 +165,17 @@ export function ChannelsPage({
   companion?: ReactNode;
 }) {
   const session = useRelayConnection(relay);
-  const restricted = () => !!sidebarScope?.snapshot().length;
-  const soloOnly = useSyncExternalStore(
+  // "solo": only Solo opens; "default": Solo is only the default destination.
+  const restriction = () =>
+    soloReach(sidebarScope)
+      ? "solo"
+      : sidebarScope?.snapshot().length
+        ? "default"
+        : "none";
+  const focus = useSyncExternalStore(
     sidebarScope?.subscribe ?? noSubscription,
-    restricted,
-    restricted,
+    restriction,
+    restriction,
   );
   const sessionNavigation = navigation?.forSession(relay, session);
   // An opening visit's deadline bounds Connecting; once it has settled, a
@@ -312,7 +321,8 @@ export function ChannelsPage({
           companion={companion}
           agents={agents}
           communities={communities}
-          soloOnly={soloOnly}
+          soloOnly={focus === "solo"}
+          soloDefault={focus !== "none"}
         />
       )}
     </section>
@@ -344,12 +354,15 @@ function ChannelWorkspace({
   archive,
   read,
   soloOnly = false,
+  soloDefault = soloOnly,
 }: {
   extensions?: ConversationExtensions | undefined;
   chatMenus?: Conversation["chatMenus"] | undefined;
   agents?: Agents | undefined;
-  /** Focus: other conversations stay closed and the default is a Solo chat. */
+  /** Focus: other conversations stay closed. */
   soloOnly?: boolean;
+  /** Focus: the default conversation is a Solo chat, leaving the saved one. */
+  soloDefault?: boolean;
   companion?: ReactNode;
   communities?: CommunityReader | undefined;
   scope: string;
@@ -560,7 +573,7 @@ function ChannelWorkspace({
       : ((!navigation && !cached && visiblePreview.current?.queries === queries
           ? queries.channels.get?.(visiblePreview.current.channelId)
           : undefined) ??
-        (soloOnly
+        (soloDefault
           ? (channels.find(
               (channel) =>
                 channel.id === selected && channel.channelType === "solo",
@@ -595,11 +608,11 @@ function ChannelWorkspace({
   // aligned with the resolved conversation, not only page-local clicks.
   useEffect(() => {
     // Focus picks a Solo default without replacing the saved one.
-    if (navigation?.target.kind !== "conversation" || !current || soloOnly)
+    if (navigation?.target.kind !== "conversation" || !current || soloDefault)
       return;
     setSelected(current.id);
     writeView(scope, "selected-channel", current.id);
-  }, [navigation?.target, current, scope, soloOnly]);
+  }, [navigation?.target, current, scope, soloDefault]);
   useEffect(() => {
     if (!joiningChannel || !current) return;
     if (current.id !== joiningChannel) setJoiningChannel(undefined);

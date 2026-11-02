@@ -66,6 +66,7 @@ function fixture({
   unread,
   capability = "frontier-sync",
   soloOnly = false,
+  quiet = false,
 }: {
   /** Observed unread messages in this chat; fakes the read state when given. */
   unread?: number;
@@ -73,6 +74,8 @@ function fixture({
   capability?: "unsupported" | "read-only" | "frontier-sync";
   /** Focus restricts the sidebar, and so the page, to Solo. */
   soloOnly?: boolean;
+  /** Focus hides the rest of the sidebar but lets anything open. */
+  quiet?: boolean;
   /** Other Solo chats listed after this one in the sidebar's Chats. */
   others?: readonly string[];
   /** The viewer's own profile has loaded too. */
@@ -367,7 +370,13 @@ function fixture({
   const archive: ArchiveShortcut = {};
   const read: ReadShortcut = {};
   const restricted = [
-    { id: "focus", scope: "solo" as const, banner: () => null, key: "focus" },
+    {
+      id: "focus",
+      scope: "solo" as const,
+      reach: quiet ? ("any" as const) : ("solo" as const),
+      banner: () => null,
+      key: "focus",
+    },
   ] as unknown as ReturnType<SidebarScope["snapshot"]>;
   const page = (sidebar = false) => (
     <ChannelNavigationProvider relay={relay}>
@@ -398,7 +407,7 @@ function fixture({
         archive={archive}
         read={read}
         sidebarScope={
-          soloOnly
+          soloOnly || quiet
             ? {
                 snapshot: () => restricted,
                 subscribe: () => () => {},
@@ -575,6 +584,13 @@ it("keeps New message closed during Focus", async () => {
 
 it("opens Solo chats as usual during Focus", async () => {
   const f = fixture({ soloOnly: true });
+  f.mount();
+  expect(await screen.findByLabelText("Channel message history")).toBeVisible();
+  expect(screen.queryByText(/Focus is on/)).toBeNull();
+});
+
+it("opens other conversations from search and links in Quiet sidebar Focus", async () => {
+  const f = fixture({ type: "stream", quiet: true });
   f.mount();
   expect(await screen.findByLabelText("Channel message history")).toBeVisible();
   expect(screen.queryByText(/Focus is on/)).toBeNull();

@@ -1,3 +1,4 @@
+import { soloReach } from "../../features/channel-navigation/sidebar-scope-service";
 import { useSearchSettings } from "./SearchSettings";
 import { usePagePresentation } from "./BestieNavigation";
 import {
@@ -329,7 +330,7 @@ function CommunitySearch({
   );
   const connection = useRelayConnection(services.communities.relay);
   // Focus: search finds only Solo chats, like the sidebar.
-  const restricted = () => !!services.sidebarScope?.snapshot().length;
+  const restricted = () => soloReach(services.sidebarScope);
   const soloOnly = useSyncExternalStore(
     services.sidebarScope?.subscribe ?? noSubscribe,
     restricted,

@@ -12,9 +12,13 @@ export type FocusStatusRecord = Readonly<{
   scope: string;
   previous: StatusInput | null;
 }>;
+/** `isolated`: only Solo chats open. `sidebar`: the sidebar and alerts stay
+ * Solo-only, but search and links still open any conversation. */
+export type FocusMode = "isolated" | "sidebar";
 export type FocusSnapshot = Readonly<{
   /** Unix seconds; `undefined` when Focus is off. */
   until: number | undefined;
+  mode: FocusMode;
   status: FocusStatusRecord | undefined;
   error: string | null;
 }>;
@@ -46,7 +50,8 @@ function parse(raw: string | null, now: number) {
           previous: parseStatus(record.previous),
         }
       : undefined;
-  return { until, status };
+  const mode: FocusMode = value.mode === "sidebar" ? "sidebar" : "isolated";
+  return { until, mode, status };
 }
 
 export function createFocus(
@@ -55,6 +60,7 @@ export function createFocus(
 ) {
   let state: FocusSnapshot = {
     until: undefined,
+    mode: "isolated",
     status: undefined,
     error: null,
   };
@@ -93,7 +99,12 @@ export function createFocus(
         error: null,
       };
     } catch {
-      state = { until: undefined, status: undefined, error: null };
+      state = {
+        until: undefined,
+        mode: "isolated",
+        status: undefined,
+        error: null,
+      };
     }
     arm();
     for (const listener of listeners) listener();
@@ -104,7 +115,7 @@ export function createFocus(
   };
   const end = () => {
     if (state.until !== undefined)
-      set({ until: undefined, status: state.status });
+      set({ until: undefined, mode: state.mode, status: state.status });
   };
   host?.addEventListener("storage", onStorage);
   restore();
@@ -117,15 +128,15 @@ export function createFocus(
       };
     },
     /** Starts Focus; the deadline must be in the future. */
-    start(until: number) {
+    start(until: number, mode: FocusMode = "isolated") {
       if (!Number.isSafeInteger(until) || until <= seconds())
         throw new Error("Choose a time in the future.");
-      set({ until, status: state.status });
+      set({ until, mode, status: state.status });
     },
     end,
     /** Owned by the status binding: remembers or forgets the replaced status. */
     recordStatus(status: FocusStatusRecord | undefined) {
-      set({ until: state.until, status });
+      set({ until: state.until, mode: state.mode, status });
     },
     dispose() {
       disposed = true;
