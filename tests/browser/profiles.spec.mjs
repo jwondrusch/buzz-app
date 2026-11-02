@@ -1137,6 +1137,54 @@ test("member rows hand off to Profiles without trapping or losing keyboard focus
     .toBe(true);
   await expect(mic).toBeFocused();
   await members.click();
+  // Temporary evidence collection on the diagnostic branch only.
+  page.on("crash", () => console.log("FOCUS_DIAG page crashed"));
+  page.on("console", (message) => {
+    if (message.text().startsWith("FOCUS_DIAG")) console.log(message.text());
+  });
+  await page.evaluate(() => {
+    let events = 0;
+    const report = (kind, element) => {
+      if (++events > 100) return;
+      const { entry, status } = window.profilesFixture.navigation.snapshot();
+      console.log(
+        "FOCUS_DIAG",
+        JSON.stringify({
+          kind,
+          status,
+          visit: entry.id,
+          target: entry.target,
+          element:
+            element instanceof Element
+              ? {
+                  tag: element.tagName,
+                  role: element.getAttribute("role"),
+                  label: element.getAttribute("aria-label"),
+                }
+              : null,
+        }),
+      );
+    };
+    const focus = HTMLElement.prototype.focus;
+    HTMLElement.prototype.focus = function (...args) {
+      report("focus", this);
+      return focus.apply(this, args);
+    };
+    for (const type of ["keydown", "keyup", "click", "focusin", "focusout"]) {
+      document.addEventListener(
+        type,
+        (event) => report(`${type}:capture`, event.target),
+        true,
+      );
+      document.addEventListener(type, (event) =>
+        report(`${type}:bubble`, event.target),
+      );
+    }
+    window.profilesFixture.navigation.subscribe(() =>
+      report("navigation", document.activeElement),
+    );
+    report("start", document.activeElement);
+  });
   // Retained Profiles can outlive their routed visit. Closing one must not
   // wait for a navigation that retiring only its older visits will not make.
   await row.press("Enter");
