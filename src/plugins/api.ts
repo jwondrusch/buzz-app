@@ -79,6 +79,9 @@ declare module "@deepseek-ai/cordis" {
       id: string;
       revision: string;
       agentHooks?: readonly string[];
+      /** During cleanup: why this installation stops. Undefined while it runs
+       * and when the app itself is closing. */
+      retiring?: () => "disabled" | "replaced" | undefined;
     }>;
   }
 }

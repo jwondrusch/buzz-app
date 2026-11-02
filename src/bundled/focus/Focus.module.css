@@ -24,3 +24,25 @@
   display: grid;
   gap: var(--space-2);
 }
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+}
+.notice {
+  padding: 0 var(--space-panel-inset);
+}
+.list {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0 var(--space-panel-inset) var(--space-panel-inset);
+  list-style: none;
+}
+.alert {
+  display: grid;
+  gap: var(--space-row-gap);
+  min-width: 0;
+}

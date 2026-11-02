@@ -33,6 +33,7 @@ import {
   type ArchiveShortcut,
   type ReadShortcut,
 } from "./ChannelsPage";
+import type { SidebarScope } from "../../features/channel-navigation/sidebar-scope-service";
 import { SoloWorkspaces } from "./SoloWorkspaces";
 import type { RelaySession } from "../../features/relay/session";
 import type { ReadTarget } from "../../features/relay/read-state-model";
@@ -64,11 +65,14 @@ function fixture({
   others = [],
   unread,
   capability = "frontier-sync",
+  soloOnly = false,
 }: {
   /** Observed unread messages in this chat; fakes the read state when given. */
   unread?: number;
   /** What the read state can do on this connection. */
   capability?: "unsupported" | "read-only" | "frontier-sync";
+  /** Focus restricts the sidebar, and so the page, to Solo. */
+  soloOnly?: boolean;
   /** Other Solo chats listed after this one in the sidebar's Chats. */
   others?: readonly string[];
   /** The viewer's own profile has loaded too. */
@@ -362,6 +366,9 @@ function fixture({
   } as unknown as Navigation;
   const archive: ArchiveShortcut = {};
   const read: ReadShortcut = {};
+  const restricted = [
+    { id: "focus", scope: "solo" as const, banner: () => null, key: "focus" },
+  ] as unknown as ReturnType<SidebarScope["snapshot"]>;
   const page = (sidebar = false) => (
     <ChannelNavigationProvider relay={relay}>
       {sidebar && (
@@ -390,6 +397,15 @@ function fixture({
         navigator={navigator}
         archive={archive}
         read={read}
+        sidebarScope={
+          soloOnly
+            ? {
+                snapshot: () => restricted,
+                subscribe: () => () => {},
+                restrict: () => () => {},
+              }
+            : undefined
+        }
       />
     </ChannelNavigationProvider>
   );
@@ -401,6 +417,7 @@ function fixture({
     archive,
     read,
     markRead,
+    complete,
     open,
     run,
     send,
@@ -518,6 +535,49 @@ it("stops offering the Archive shortcut when its visit ends", async () => {
   await waitFor(() => expect(f.archive.current?.available()).toBe(true));
   f.abort.abort();
   expect(f.archive.current?.available()).toBe(false);
+});
+
+it("keeps other conversations closed during Focus, presenting why in place", async () => {
+  const f = fixture({ type: "stream", soloOnly: true });
+  f.mount();
+  expect(
+    await screen.findByText("Focus is on. Only Solo chats open until it ends."),
+  ).toBeVisible();
+  expect(screen.queryByLabelText("Channel message history")).toBeNull();
+  expect(f.complete).toHaveBeenCalledWith({
+    status: "failed",
+    reason: "unavailable",
+    presented: true,
+  });
+});
+
+it("keeps New message closed during Focus", async () => {
+  const f = fixture({
+    soloOnly: true,
+    target: () => ({
+      version: 1,
+      kind: "page",
+      pluginId: "buzz.channels",
+      pageId: "channels",
+      route: { version: 1, params: "new-message" },
+    }),
+  });
+  f.mount();
+  expect(
+    await screen.findByText("Focus is on. Only Solo chats open until it ends."),
+  ).toBeVisible();
+  expect(f.complete).toHaveBeenCalledWith({
+    status: "failed",
+    reason: "unavailable",
+    presented: true,
+  });
+});
+
+it("opens Solo chats as usual during Focus", async () => {
+  const f = fixture({ soloOnly: true });
+  f.mount();
+  expect(await screen.findByLabelText("Channel message history")).toBeVisible();
+  expect(screen.queryByText(/Focus is on/)).toBeNull();
 });
 
 it("renders a Solo draft route as the new chat composer", async () => {

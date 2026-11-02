@@ -246,6 +246,34 @@ test("enabled plugin stays active across catalog refreshes and cleans up on disa
   assert.equal(h.states["example.page"], undefined);
 });
 
+test("cleanup can tell disable from replacement and from app teardown", async () => {
+  const reasons = [];
+  const h = harness(async () => ({
+    apply(ctx) {
+      ctx.effect(() => () => {
+        reasons.push(ctx.pluginOwner.retiring());
+      });
+      ctx.pages.register({ id: "main", title: "Main", component: Page });
+    },
+  }));
+  const active = (revision) =>
+    h.wait(
+      (s) =>
+        s["example.page"]?.status === "active" &&
+        s["example.page"].revision === revision,
+    );
+  h.runtime.reconcile(desired([plugin()]));
+  await active("one");
+  h.runtime.reconcile(desired([plugin("example.page", "two")]));
+  await active("two");
+  h.runtime.reconcile(desired([]));
+  await vi.waitFor(() => assert.equal(reasons.length, 2));
+  h.runtime.reconcile(desired([plugin("example.page", "three")]));
+  await active("three");
+  await h.dispose();
+  assert.deepEqual(reasons, ["replaced", "disabled", undefined]);
+});
+
 test("replacement and rapid disable/enable wait for async cleanup", async () => {
   const cleanup = deferred();
   const stopping = deferred();

@@ -125,6 +125,7 @@ export type {
   NotificationInput,
   NotificationCategoryDescriptor,
   NotificationGate,
+  HeldNotification,
 } from "../features/notifications/service";
 
 export type { VoiceRecording } from "../features/relay/voice-media";

@@ -31,11 +31,23 @@ export type NotificationInput = Readonly<{
   title?: string;
   body?: string;
 }>;
+/** An alert a gate stopped that the host would otherwise have shown. */
+export type HeldNotification = Readonly<{
+  category: string;
+  label: string;
+  target: OpenTarget;
+  title: string;
+  body: string;
+  /** Unix milliseconds. */
+  at: number;
+}>;
 /** Narrows which targets may alert: banners, sounds and the Dock unread dot. */
 export type NotificationGate = Readonly<{
   id: string;
   /** A throwing gate is skipped. */
   allows(target: OpenTarget): boolean;
+  /** Receives each alert this gate stopped, so it can be kept for later. */
+  hold?(alert: HeldNotification): void;
 }>;
 export interface Notifications {
   register(
@@ -53,6 +65,7 @@ declare module "@deepseek-ai/cordis" {
 export type NotificationEligibility = boolean | "wait";
 type Candidate = {
   category: string;
+  label: string;
   target: OpenTarget;
   viewer: string;
   expires: number;
@@ -244,6 +257,10 @@ export class NotificationsService extends Service implements Notifications {
     return this.permissionRequest ?? Promise.resolve();
   }
   private allowed(item: Candidate) {
+    return this.permitted(item) && this.gated(item.target);
+  }
+  /** Every check except plugin gates. */
+  private permitted(item: Candidate) {
     return (
       !this.closed &&
       !this.state.developmentPaused &&
@@ -252,7 +269,6 @@ export class NotificationsService extends Service implements Notifications {
       item.expires > Date.now() &&
       item.valid() &&
       this.authorized(item.target) &&
-      this.gated(item.target) &&
       this.state.preferences.enabled &&
       this.state.preferences.categories[item.category] !== false
     );
@@ -265,13 +281,41 @@ export class NotificationsService extends Service implements Notifications {
   }
   /** Whether every registered gate lets this target alert. */
   gated(target: OpenTarget) {
-    return this.gates.snapshot().every((gate) => {
+    return this.refusing(target).length === 0;
+  }
+  private refusing(target: OpenTarget) {
+    return this.gates.snapshot().filter((gate) => {
       try {
-        return gate.allows(target);
+        return !gate.allows(target);
       } catch {
-        return true;
+        return false;
       }
     });
+  }
+  /** Hands an alert stopped only by gates to the gates that keep them, once
+   * it is known it would have been shown. `"wait"` keeps it pending until its
+   * eligibility settles; `false` means no gate keeps it. */
+  private hold(item: Candidate): "held" | "wait" | false {
+    const refusing = this.refusing(item.target);
+    if (!refusing.length || !this.permitted(item)) return false;
+    const eligible = item.eligible();
+    if (eligible === "wait") return "wait";
+    if (eligible !== true) return false;
+    const alert = Object.freeze({
+      category: item.category,
+      label: item.label,
+      target: item.target,
+      ...item.text(),
+      at: Date.now(),
+    });
+    for (const gate of refusing) {
+      try {
+        gate.hold?.(alert);
+      } catch (error) {
+        this.reportError(error);
+      }
+    }
+    return "held";
   }
   subscribeGates = (listener: () => void) => this.gates.subscribe(listener);
   gate(gate: NotificationGate) {
@@ -287,6 +331,7 @@ export class NotificationsService extends Service implements Notifications {
   revalidate() {
     for (const item of this.pending) {
       if (!this.allowed(item) || item.eligible() === false) {
+        if (this.hold(item) === "wait") continue;
         item.cancelled = true;
         this.pending.delete(item);
       }
@@ -393,6 +438,7 @@ export class NotificationsService extends Service implements Notifications {
     if (this.seen.has(key)) return false;
     const item: Candidate = {
       category,
+      label,
       target,
       viewer,
       valid,
@@ -402,8 +448,13 @@ export class NotificationsService extends Service implements Notifications {
       cancelled: false,
       submitting: false,
     };
+    const held = this.hold(item);
+    if (held === "held") {
+      this.seen.set(key, now + FRESH_MS);
+      return false;
+    }
     // Visibility is rechecked after the UI commits; do not race the reading hook.
-    if (!this.allowed(item)) return false;
+    if (!held && !this.allowed(item)) return false;
     if (this.pending.size >= 128) {
       this.reportError(new Error("Too many pending notifications"));
       return false;
@@ -414,6 +465,8 @@ export class NotificationsService extends Service implements Notifications {
       if (first) this.seen.delete(first);
     }
     this.pending.add(item);
+    // A held-back alert waits for revalidation to settle it, never delivery.
+    if (held === "wait") return false;
     this.schedule();
     return true;
   }
@@ -430,6 +483,7 @@ export class NotificationsService extends Service implements Notifications {
   }
   private async deliver(item: Candidate) {
     if (!this.allowed(item) || item.eligible() === false) {
+      if (this.hold(item) === "wait") return;
       this.pending.delete(item);
       return;
     }

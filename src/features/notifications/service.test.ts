@@ -259,6 +259,79 @@ it("plugin gates hold alerts until removed or the plugin is disabled", async () 
   expect(t.service.gated(target)).toBe(true);
   expect(await t.submit("released")).toBe(true);
 });
+it("hands stopped alerts to the gates that refused them, once, and only when otherwise shown", async () => {
+  const t = setup();
+  const held: unknown[] = [];
+  const other: unknown[] = [];
+  let gate: Notifications["gate"] | undefined;
+  t.install({
+    inject: ["notifications"],
+    apply(ctx) {
+      gate = (value) => ctx.notifications.gate(value);
+    },
+  });
+  await vi.waitFor(() => expect(gate).toBeDefined());
+  gate?.({
+    id: "solo",
+    allows: () => false,
+    hold: (alert) => held.push(alert),
+  });
+  gate?.({
+    id: "open",
+    allows: () => true,
+    hold: (alert) => other.push(alert),
+  });
+  expect(await t.submit("first")).toBe(false);
+  expect(await t.submit("first")).toBe(false);
+  expect(held).toEqual([
+    expect.objectContaining({
+      category: "mention",
+      label: "Mentions",
+      target,
+      at: expect.any(Number),
+    }),
+  ]);
+  expect(other).toEqual([]);
+  // Alerts the host would not have shown anyway are not kept.
+  await t.submit("ineligible", () => false);
+  let settled: boolean | "wait" = "wait";
+  await t.submit("waiting", () => settled);
+  await flush();
+  expect(held).toHaveLength(1);
+  settled = false;
+  t.service.revalidate();
+  t.service.updatePreferences({ enabled: false });
+  await t.submit("off");
+  expect(held).toHaveLength(1);
+  expect(t.platform.show).not.toHaveBeenCalled();
+});
+it("a pending alert a new gate refuses is held rather than dropped", async () => {
+  const t = setup();
+  const held: unknown[] = [];
+  let gate: Notifications["gate"] | undefined;
+  t.install({
+    inject: ["notifications"],
+    apply(ctx) {
+      gate = (value) => ctx.notifications.gate(value);
+    },
+  });
+  await vi.waitFor(() => expect(gate).toBeDefined());
+  let ready = false;
+  await t.submit("waiting", () => (ready ? true : "wait"));
+  gate?.({
+    id: "solo",
+    allows: () => false,
+    hold: (alert) => held.push(alert),
+  });
+  await flush();
+  // Not kept until it is known it would have been shown.
+  expect(held).toHaveLength(0);
+  ready = true;
+  t.service.revalidate();
+  await flush();
+  expect(t.platform.show).not.toHaveBeenCalled();
+  expect(held).toHaveLength(1);
+});
 it("off takes effect despite storage failure and account preferences stay separate", () => {
   const t = setup();
   t.service.updatePreferences({ categories: { mention: false }, sound: false });

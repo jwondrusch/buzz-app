@@ -3,6 +3,7 @@ import { ChannelCompletion } from "./ChannelCompletion";
 import { channelQuery } from "./channel-query";
 import { isChannelRoute } from "../../features/channel-navigation/routes";
 import type { PluginModule } from "../../plugins/api";
+import type { SidebarScope } from "../../features/channel-navigation/sidebar-scope-service";
 import { ChannelsPage } from "./ChannelsPage";
 import { PageTabs } from "./PageTabs";
 import { registerCanvas } from "./canvas-panel";
@@ -114,6 +115,10 @@ export const apply: PluginModule["apply"] = (ctx) => {
     run: () => read.current?.run(),
   });
   const agents = ctx.agents;
+  // Optional: the host provides it, but Channels must not wait on it.
+  const sidebarScope = ctx.reflect.get("sidebarScope") as
+    | SidebarScope
+    | undefined;
   ctx.settingsCards.register({
     id: "templates",
     title: "Channel templates",
@@ -145,6 +150,7 @@ export const apply: PluginModule["apply"] = (ctx) => {
         companion={companion}
         agents={agents}
         communities={ctx.communityReader}
+        sidebarScope={sidebarScope}
       />
     ),
   });

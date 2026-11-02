@@ -18,6 +18,7 @@ type Entry = {
   unwatch?: () => void;
   stopped?: Promise<void>;
   predecessor: Promise<void>;
+  retiring?: "disabled" | "replaced";
 };
 
 // Cordis 4.0.2 erases its FiberState const enum from the published JavaScript.
@@ -84,6 +85,7 @@ export class PluginRuntime {
       )
         continue;
       // Keep the entry as a teardown barrier: rapid disable/enable must also wait.
+      entry.retiring ??= next ? "replaced" : "disabled";
       void this.stop(entry).catch(() => {});
       if (id in this.states) {
         const { [id]: _removed, ...rest } = this.states;
@@ -156,6 +158,7 @@ export class PluginRuntime {
           agentHooks: Object.freeze([
             ...(entry.plugin.manifest.host?.agentHooks ?? []),
           ]),
+          retiring: () => entry.retiring,
         }),
       });
       const fiber = scope.plugin({

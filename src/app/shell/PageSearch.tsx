@@ -46,6 +46,7 @@ export type SearchServices = Pick<
       | "plugins"
       | "adminAccess"
       | "settingsCards"
+      | "sidebarScope"
     >
   >;
 const SEARCH_ID = "global-search";
@@ -327,6 +328,13 @@ function CommunitySearch({
     services.communities.snapshot,
   );
   const connection = useRelayConnection(services.communities.relay);
+  // Focus: search finds only Solo chats, like the sidebar.
+  const restricted = () => !!services.sidebarScope?.snapshot().length;
+  const soloOnly = useSyncExternalStore(
+    services.sidebarScope?.subscribe ?? noSubscribe,
+    restricted,
+    restricted,
+  );
   if (
     !enabled ||
     !client.selected ||
@@ -414,6 +422,7 @@ function CommunitySearch({
       onScopeChange={onScopeChange}
       usageScope={usageScope(scope)}
       sidebarScope={connection.scope}
+      soloOnly={soloOnly}
       openConversation={(channelId, messageId) => {
         const current = services.communities.snapshot();
         if (

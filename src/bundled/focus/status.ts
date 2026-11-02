@@ -17,7 +17,6 @@ export function bindFocusStatus(
     console.warn("Focus status", error),
 ) {
   let closed = false;
-  let running = false;
   let again = false;
   // One attempt per Focus deadline: a failed set is not retried on every
   // relay change, and ending Focus still restores whatever was recorded.
@@ -73,13 +72,13 @@ export function bindFocusStatus(
       focus.recordStatus(undefined);
     }
   };
-  const sync = async () => {
-    if (running) {
+  let loop: Promise<void> | undefined;
+  const sync = (): Promise<void> => {
+    if (loop) {
       again = true;
-      return;
+      return loop;
     }
-    running = true;
-    try {
+    loop = (async () => {
       do {
         again = false;
         try {
@@ -88,18 +87,29 @@ export function bindFocusStatus(
           if (!closed) report(error);
         }
       } while (again && !closed);
-    } finally {
-      running = false;
-    }
+    })().finally(() => {
+      loop = undefined;
+      if (again && !closed) void sync();
+    });
+    return loop;
   };
   const stopFocus = focus.subscribe(() => void sync());
   const stopRelay = relay.subscribe(() => void sync());
   void sync();
-  return () => {
+  const stop = () => {
     closed = true;
     stopFocus();
     stopRelay();
   };
+  return Object.assign(stop, {
+    /** Finishes the status work Focus's current state calls for, then stops. */
+    async settle() {
+      await sync();
+      // A change during the last step reruns the loop; finish that too.
+      while (loop) await loop;
+      stop();
+    },
+  });
 }
 
 /** Focus lets through only conversations the selected community lists as Solo. */

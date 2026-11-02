@@ -10,6 +10,7 @@ import { LoadingRegion } from "../../shared/design-system/ui/LoadingRegion";
 import { TypingDots } from "../../shared/design-system/ui/TypingDots";
 import { profileActivityViewTarget } from "../../features/profiles/target";
 import type { Agents } from "../../features/agents/service";
+import type { SidebarScope } from "../../features/channel-navigation/sidebar-scope-service";
 import { SoloDraft } from "../../features/solo/SoloDraft";
 import { useChannelNavigation } from "../../features/channel-navigation/ChannelNavigationState";
 import { soloSuccessor } from "../../features/channel-navigation/solo-successor";
@@ -117,6 +118,8 @@ import styles from "./Channels.module.css";
 import type { CommunityReader } from "../../features/communities/service";
 import { avatarMedia } from "../../shared/avatar-source";
 
+const noSubscription = () => () => {};
+
 /** The open Solo conversation's Archive, published for the shortcut while its visit is live. */
 export type ArchiveShortcut = {
   current?: { available(): boolean; run(): Promise<void> } | undefined;
@@ -139,12 +142,15 @@ export function ChannelsPage({
   communities,
   archive,
   read,
+  sidebarScope,
 }: {
   extensions?: ConversationExtensions | undefined;
   chatMenus?: Conversation["chatMenus"] | undefined;
   /** For adding a whole team of the owner's agents from the members dialog. */
   agents?: Agents | undefined;
   communities?: CommunityReader | undefined;
+  /** While a plugin restricts the sidebar to Solo, only Solo chats open. */
+  sidebarScope?: SidebarScope | undefined;
   relay: RelayData;
   navigation?: PageNavigation | undefined;
   navigator: Navigation;
@@ -156,6 +162,12 @@ export function ChannelsPage({
   companion?: ReactNode;
 }) {
   const session = useRelayConnection(relay);
+  const restricted = () => !!sidebarScope?.snapshot().length;
+  const soloOnly = useSyncExternalStore(
+    sidebarScope?.subscribe ?? noSubscription,
+    restricted,
+    restricted,
+  );
   const sessionNavigation = navigation?.forSession(relay, session);
   // An opening visit's deadline bounds Connecting; once it has settled, a
   // retrying connection is a failure that keeps trying, not a connection.
@@ -300,6 +312,7 @@ export function ChannelsPage({
           companion={companion}
           agents={agents}
           communities={communities}
+          soloOnly={soloOnly}
         />
       )}
     </section>
@@ -330,10 +343,13 @@ function ChannelWorkspace({
   communities,
   archive,
   read,
+  soloOnly = false,
 }: {
   extensions?: ConversationExtensions | undefined;
   chatMenus?: Conversation["chatMenus"] | undefined;
   agents?: Agents | undefined;
+  /** Focus: other conversations stay closed and the default is a Solo chat. */
+  soloOnly?: boolean;
   companion?: ReactNode;
   communities?: CommunityReader | undefined;
   scope: string;
@@ -544,14 +560,29 @@ function ChannelWorkspace({
       : ((!navigation && !cached && visiblePreview.current?.queries === queries
           ? queries.channels.get?.(visiblePreview.current.channelId)
           : undefined) ??
-        channels.find((channel) => channel.id === selected) ??
-        channels.find((item) => item.channelType !== "solo"));
+        (soloOnly
+          ? (channels.find(
+              (channel) =>
+                channel.id === selected && channel.channelType === "solo",
+            ) ?? channels.find((item) => item.channelType === "solo"))
+          : (channels.find((channel) => channel.id === selected) ??
+            channels.find((item) => item.channelType !== "solo"))));
+  // Links, search and alert clicks to anything else wait until Focus ends.
+  // New message starts DMs and channels, so it waits too.
+  const focusBlocked =
+    soloOnly &&
+    (composingMessage ||
+      (!!requestedDestination &&
+        !requestedDestination.metadataPending &&
+        requestedDestination.channelType !== "solo"));
   // Exact links and saved selections must respect the same Huddle-only entry point.
   const resolving =
     resolvingMembership ||
     (list.status !== "error" && !!requestedDestination?.metadataPending);
   const current =
-    requestedDestination?.huddle || requestedDestination?.metadataPending
+    focusBlocked ||
+    requestedDestination?.huddle ||
+    requestedDestination?.metadataPending
       ? undefined
       : requestedDestination;
   useLayoutEffect(() => {
@@ -563,10 +594,12 @@ function ChannelWorkspace({
   // Sidebar routing can update the same mounted page. Keep its saved default
   // aligned with the resolved conversation, not only page-local clicks.
   useEffect(() => {
-    if (navigation?.target.kind !== "conversation" || !current) return;
+    // Focus picks a Solo default without replacing the saved one.
+    if (navigation?.target.kind !== "conversation" || !current || soloOnly)
+      return;
     setSelected(current.id);
     writeView(scope, "selected-channel", current.id);
-  }, [navigation?.target, current, scope]);
+  }, [navigation?.target, current, scope, soloOnly]);
   useEffect(() => {
     if (!joiningChannel || !current) return;
     if (current.id !== joiningChannel) setJoiningChannel(undefined);
@@ -580,6 +613,14 @@ function ChannelWorkspace({
   const CurrentChannelIcon = channelIcon(current);
   useEffect(() => {
     if (navigation?.signal.aborted) return;
+    if (focusBlocked) {
+      navigation?.complete({
+        status: "failed",
+        reason: "unavailable",
+        presented: true,
+      });
+      return;
+    }
     if (composingMessage || draft) {
       navigation?.complete({ status: "opened" });
       return;
@@ -622,6 +663,7 @@ function ChannelWorkspace({
     metadataPending,
     emptyDestination,
     draft,
+    focusBlocked,
     requestedChannel,
     resolving,
     current,
@@ -1870,7 +1912,9 @@ function ChannelWorkspace({
           >
             {resolving
               ? "Checking conversation access…"
-              : "Select a channel to read it."}
+              : focusBlocked
+                ? "Focus is on. Only Solo chats open until it ends."
+                : "Select a channel to read it."}
           </div>
         )}
         {current && channelNotice && (
@@ -2002,7 +2046,7 @@ function ChannelWorkspace({
           }
           data-attachment-drop-zone=""
         >
-          {composingMessage ? (
+          {composingMessage && !focusBlocked ? (
             <LiveNewMessage
               host={{ relay, panels, navigation: navigator }}
               session={queries}

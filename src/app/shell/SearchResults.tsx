@@ -122,6 +122,7 @@ export function SearchResults({
   openAgentSession,
   usageScope,
   sidebarScope,
+  soloOnly = false,
 }: {
   session: RelaySession;
   pages: readonly SearchDestination[];
@@ -136,6 +137,8 @@ export function SearchResults({
   usageScope?: string | undefined;
   /** The sidebar's view scope, whose hidden DMs search leaves out too. */
   sidebarScope?: string | undefined;
+  /** Focus: only Solo chats and their messages are found. */
+  soloOnly?: boolean;
 } & SearchInputProps) {
   const resolveName = useIdentityNames(session.names);
   const list = useChannelList(session.channels);
@@ -158,9 +161,10 @@ export function SearchResults({
                 channel.channelType === "forum" ||
                 channel.channelType === "solo"))) &&
           (!channel.hidden || channel.channelType === "dm") &&
+          (!soloOnly || channel.channelType === "solo") &&
           (!scopedChannelId || channel.id === scopedChannelId),
       ),
-    [list.channels, scopedChannelId],
+    [list.channels, scopedChannelId, soloOnly],
   );
   // A DM hidden from the sidebar (Remove from Team, or Hide conversation) has
   // no row here either. Its messages still match, and choosing the person
@@ -279,7 +283,7 @@ export function SearchResults({
     !localChannel;
   const operatorPublicChannels = usePublicChannelSearch(
     session,
-    needsPublicLookup ? operatorChannel : "",
+    needsPublicLookup && !soloOnly ? operatorChannel : "",
     list.status === "ready",
     true,
   );
@@ -508,7 +512,7 @@ export function SearchResults({
       : [];
   const publicChannels = usePublicChannelSearch(
     session,
-    scopedChannelId ? "" : parsed.text,
+    scopedChannelId || soloOnly ? "" : parsed.text,
     list.status === "ready",
   );
 
@@ -601,7 +605,9 @@ export function SearchResults({
         knownAgents.has(pubkey) ||
         sessionAgents.has(pubkey);
       // As in New message, agent DM eligibility comes from the shared choices.
+      // Focus: only the viewer's own agents, which open a new Solo chat.
       return pubkey === session.viewer ||
+        (soloOnly && !sessionAgents.has(pubkey)) ||
         (agent &&
           !messageableAgents.has(pubkey) &&
           !sessionAgents.has(pubkey)) ||
@@ -993,7 +999,14 @@ export function SearchResults({
           },
         ]
       : [];
-  const messages: SearchDestination[] = search.messages.map((message) => {
+  const found = soloOnly
+    ? search.messages.filter(
+        (message) =>
+          list.channels.find((channel) => channel.id === message.channelId)
+            ?.channelType === "solo",
+      )
+    : search.messages;
+  const messages: SearchDestination[] = found.map((message) => {
     const displayId = message.workflowOwnerId ?? message.authorId;
     const name = resolveName(
       displayId,

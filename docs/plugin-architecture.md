@@ -347,7 +347,11 @@ inventory while it is registered. The All/Solo/Team tabs and page destinations
 give way to the plugin's `banner` component, and the person's saved tab returns
 when the last restriction is removed. It returns a remover; disable, replacement
 and teardown remove it too, so a restriction can never outlive its plugin. A
-banner that throws renders nothing and leaves the sidebar usable. Focus is the
+banner that throws renders nothing and leaves the sidebar usable. While any
+restriction is registered, Channels opens only Solo conversations: a link,
+search result or alert click to another one completes as unavailable with an
+in-page notice, the default conversation is a Solo chat, and the saved selection
+is left alone. Search lists only Solo chats and their messages. Focus is the
 first caller and registers its restriction only while Focus is on.
 
 A plugin exports `inject` and `apply(ctx)`. Pages register with
@@ -535,7 +539,16 @@ every gate to allow the target; the Dock asks about each conversation as a
 `conversation` target. Pending alerts are rechecked when a gate is added or
 removed. A throwing gate is skipped. `gate` returns a remover, and disabling the
 plugin removes its gates. Gates never widen the host's own access and
-preference checks. Focus registers one only while Focus is on.
+preference checks. A gate's optional `hold(alert)` receives each alert it
+stopped that would otherwise have been shown, with its category, label, target,
+title, body and arrival time, so the plugin can keep it for later; alerts the
+host would not have shown anyway are not handed over. Focus registers one only
+while Focus is on and saves what it holds on a Focus alerts page.
+
+During cleanup, `ctx.pluginOwner.retiring()` says why the installation stops:
+`"disabled"` when the person turned it off, `"replaced"` for an update or reload,
+and `undefined` while it runs or when the app itself closes. Focus uses it to end
+Focus and restore the status only when it is turned off.
 
 A page may supply `icon`, a `data:image/<subtype>[;params],<payload>` URL; the
 scheme and type match case-insensitively. Search Buzz and the page navigation

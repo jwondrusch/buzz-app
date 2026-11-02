@@ -171,6 +171,43 @@ it("opens with a conversation action and recent channels in activity order", asy
   }
 });
 
+it("finds only Solo chats during Focus", () => {
+  const owner = createRelaySession(null);
+  const list = {
+    status: "ready" as const,
+    channels: [
+      { id: "team", name: "Planning team", channelType: "stream" as const },
+      { id: "chat", name: "Planning chat", channelType: "solo" as const },
+    ],
+  };
+  const session = {
+    ...owner.session,
+    channels: {
+      ...owner.session.channels,
+      list: () => list,
+      ensureList() {},
+    },
+  };
+  try {
+    render(
+      <SearchResults
+        session={session}
+        query="Planning"
+        onQueryChange={() => {}}
+        input={createRef()}
+        pages={[]}
+        openConversation={() => {}}
+        soloOnly
+      />,
+    );
+    expect(screen.getByRole("option", { name: /Planning chat/ })).toBeVisible();
+    expect(screen.queryByRole("option", { name: /Planning team/ })).toBeNull();
+  } finally {
+    cleanup();
+    owner.dispose();
+  }
+});
+
 it("ranks typed channel names and selects the best one for Enter", async () => {
   const relay = keypair();
   const viewer = keypair();
@@ -4691,6 +4728,81 @@ it("uses readable owners before key suffixes for agent namesakes", async () => {
         name: /^NamesakeStart a direct message$/,
       }),
     ).toBeVisible();
+  } finally {
+    cleanup();
+    owner.dispose();
+  }
+});
+it("offers only new chats with the viewer's agents during Focus, not DMs", async () => {
+  const relay = keypair(),
+    viewer = keypair(),
+    mine = keypair(),
+    theirs = keypair(),
+    person = keypair();
+  const wire = scriptedTransport(viewer.pubkey, relay.pubkey);
+  const discovery = [
+    metadata(relay, "theirs-dm", "opaque", 1700000000, [
+      ["t", "dm"],
+      ["private", ""],
+    ]),
+    roster(relay, "theirs-dm", [viewer.pubkey, theirs.pubkey]),
+    profile(mine, { name: "Scout", is_agent: true }),
+    profile(theirs, { name: "Scooter", is_agent: true }),
+    profile(person, { name: "Scottie" }),
+  ];
+  const owner = createRelaySession({
+    ...wire.transport,
+    async query(filters) {
+      if (filters.some((filter) => filter.search !== undefined)) return [];
+      return discovery.filter((event) =>
+        filters.some((filter) => matchFilter(filter as Filter, event)),
+      );
+    },
+  });
+  const source = owner.session.agentChoices;
+  const choices = {
+    ...source.snapshot(),
+    identities: [{ pubkey: mine.pubkey, name: "Scout", managed: true }],
+    selectable: [{ pubkey: mine.pubkey, name: "Scout", managed: true }],
+  };
+  // A cached person with no DM yet: outside Focus, search offers one.
+  const profiles = new Map([[person.pubkey, { name: "Scottie" }]]);
+  const session = {
+    ...owner.session,
+    profiles: {
+      ...owner.session.profiles,
+      snapshot: () => profiles,
+      subscribe: () => () => {},
+      ensure: async () => {},
+    },
+    agentChoices: {
+      ...source,
+      snapshot: () => choices,
+      subscribe: () => () => {},
+      retain: () => () => {},
+      ensure: () => {},
+    },
+  } as typeof owner.session;
+  try {
+    render(
+      <SearchResults
+        session={session}
+        query="sco"
+        onQueryChange={() => {}}
+        input={createRef()}
+        pages={[]}
+        openConversation={() => {}}
+        openAgentSession={() => {}}
+        soloOnly
+      />,
+    );
+    const agents = within(await screen.findByRole("group", { name: "Agents" }));
+    expect(agents.getByRole("option", { name: /Scout/ })).toHaveTextContent(
+      "New chat",
+    );
+    expect(screen.queryByRole("option", { name: /Scooter/ })).toBeNull();
+    expect(screen.queryByRole("option", { name: /Scottie/ })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Direct messages" })).toBeNull();
   } finally {
     cleanup();
     owner.dispose();

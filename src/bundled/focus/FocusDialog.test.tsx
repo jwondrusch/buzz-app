@@ -3,7 +3,8 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
-import { FocusDialog } from "./FocusDialog";
+import { FOCUS_DURATION_KEY, FocusDialog } from "./FocusDialog";
+import { createHeld } from "./held";
 import { createFocus } from "./state";
 
 afterEach(() => {
@@ -15,9 +16,17 @@ it("starts Focus for the chosen duration and offers End while it is on", async (
   const user = userEvent.setup();
   const focus = createFocus();
   const onOpenChange = vi.fn();
-  const view = render(
-    <FocusDialog open onOpenChange={onOpenChange} focus={focus} />,
+  const held = createHeld();
+  const dialog = (
+    <FocusDialog
+      open
+      onOpenChange={onOpenChange}
+      focus={focus}
+      held={held}
+      onReview={() => {}}
+    />
   );
+  const view = render(dialog);
   await user.click(screen.getByRole("button", { name: "Duration: 1 hour" }));
   await user.click(
     await screen.findByRole("menuitemradio", { name: "30 minutes" }),
@@ -28,7 +37,8 @@ it("starts Focus for the chosen duration and offers End while it is on", async (
   expect(until - before).toBeGreaterThanOrEqual(1799);
   expect(until - before).toBeLessThanOrEqual(1801);
   expect(onOpenChange).toHaveBeenLastCalledWith(false);
-  view.rerender(<FocusDialog open onOpenChange={onOpenChange} focus={focus} />);
+  expect(localStorage.getItem(FOCUS_DURATION_KEY)).toBe("1800");
+  view.rerender(dialog);
   expect(screen.getByText(/^Focusing until/)).toBeVisible();
   await user.click(screen.getByRole("button", { name: "End focus" }));
   expect(focus.snapshot().until).toBeUndefined();
@@ -38,7 +48,16 @@ it("starts Focus for the chosen duration and offers End while it is on", async (
 it("rejects a custom end time that has already passed", async () => {
   const user = userEvent.setup();
   const focus = createFocus();
-  render(<FocusDialog open onOpenChange={() => {}} focus={focus} />);
+  const held = createHeld();
+  render(
+    <FocusDialog
+      open
+      onOpenChange={() => {}}
+      focus={focus}
+      held={held}
+      onReview={() => {}}
+    />,
+  );
   await user.click(screen.getByRole("button", { name: "Duration: 1 hour" }));
   await user.click(
     await screen.findByRole("menuitemradio", { name: "Custom" }),
@@ -50,4 +69,40 @@ it("rejects a custom end time that has already passed", async () => {
   expect(focus.snapshot().until).toBeUndefined();
   vi.restoreAllMocks();
   focus.dispose();
+});
+
+it("starts from the last duration and links to waiting alerts", async () => {
+  const user = userEvent.setup();
+  localStorage.setItem(FOCUS_DURATION_KEY, "7200");
+  const focus = createFocus();
+  const held = createHeld();
+  held.add({
+    category: "mention",
+    label: "Mentions",
+    target: { version: 1, kind: "settings", section: "about" },
+    title: "Ana",
+    body: "Hi",
+    at: Date.now(),
+  });
+  const onOpenChange = vi.fn();
+  const onReview = vi.fn();
+  render(
+    <FocusDialog
+      open
+      onOpenChange={onOpenChange}
+      focus={focus}
+      held={held}
+      onReview={onReview}
+    />,
+  );
+  expect(
+    screen.getByRole("button", { name: "Duration: 2 hours" }),
+  ).toBeVisible();
+  await user.click(
+    screen.getByRole("button", { name: "Review 1 alert waiting" }),
+  );
+  expect(onReview).toHaveBeenCalled();
+  expect(onOpenChange).toHaveBeenLastCalledWith(false);
+  focus.dispose();
+  held.dispose();
 });
