@@ -5,61 +5,74 @@ permissions:
   contents: read
 jobs:
   diagnostic:
-    name: WebKit retained-close diagnostics
+    name: WebKit native-stack diagnostics
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    container:
-      image: mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
-      options: --init --ipc=host
-    defaults:
-      run:
-        shell: bash
     env:
       CI: "true"
-      HOME: /root
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
-      - name: Trust container workspace
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - uses: ./.github/actions/setup
-        with:
-          browsers: "true"
-          browser-engine: webkit
-      - name: Repeat only the affected journey with renderer evidence
+      - name: Verify existing native debugger
+        run: |
+          command -v lldb-18
+          lldb-18 --version
+      - name: Repeat affected journey and sample stalled renderer stacks
+        shell: bash
         run: |
           set -eu
           mkdir -p test-results/diagnostics
           git rev-parse HEAD > test-results/diagnostics/revision
+          date -u --iso-8601=seconds > test-results/diagnostics/start
+          docker run --detach --name webkit-probe --init --ipc=host \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE" \
+            -v "$HOME/.cache/hermit:$HOME/.cache/hermit" \
+            -e HERMIT_STATE_DIR="$HOME/.cache/hermit" -e CI=true -e HOME=/root \
+            mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27 tail -f /dev/null
+          trap 'docker rm -f webkit-probe >/dev/null 2>&1 || true' EXIT
+          touch test-results/diagnostics/active
           (
-            while :; do
+            captures=0
+            while test -f test-results/diagnostics/active; do
               date -u
               cat /proc/loadavg
               grep -E "MemAvailable|MemFree|SwapFree" /proc/meminfo || true
-              for entry in memory.current memory.max memory.events; do
-                if test -r "/sys/fs/cgroup/$entry"; then
-                  echo "$entry"
-                  cat "/sys/fs/cgroup/$entry"
-                fi
-              done
-              ps -eo pid,ppid,rss,pcpu,comm
-              sleep 2
+              docker top webkit-probe -eo pid,ppid,rss,pcpu,comm || true
+              seen=$(grep -c WK_KEY_STALLED test-results/diagnostics/browser.log 2>/dev/null || true)
+              if test "${seen:-0}" -gt "$captures"; then
+                captures=$seen
+                for renderer in $(docker top webkit-probe -eo pid,comm | awk '$2 == "WPEWebProcess" { print $1 }'); do
+                  (
+                    timeout 15s sudo lldb-18 --batch --file "/proc/$renderer/exe" \
+                      -o "target modules search-paths add / /proc/$renderer/root/" \
+                      -o "process attach -p $renderer" \
+                      -o "thread backtrace all -c 25" \
+                      -o "process detach" \
+                      > "test-results/diagnostics/native-$captures-$renderer.log" 2>&1 || true
+                  ) &
+                done
+                wait
+              fi
+              sleep 1
             done
           ) > test-results/diagnostics/resources.log 2>&1 &
           monitor=$!
-          trap 'kill "$monitor" 2>/dev/null || true' EXIT
           set +e
-          DEBUG=pw:browser ./bin/pnpm test:browser:ci --project webkit --no-deps --repeat-each=10 --grep "member rows hand off" tests/browser/profiles.spec.mjs > test-results/diagnostics/browser.log 2>&1
+          docker exec webkit-probe sh -lc './bin/node scripts/diagnose-webkit-press.mjs && DEBUG=pw:browser ./bin/pnpm test:browser:ci --project webkit --no-deps --repeat-each=10 --grep "member rows hand off" tests/browser/profiles.spec.mjs' > test-results/diagnostics/browser.log 2>&1
           result=$?
           set -e
+          rm test-results/diagnostics/active
+          wait "$monitor" || true
+          sudo coredumpctl --no-pager --since="$(cat test-results/diagnostics/start)" info > test-results/diagnostics/coredumps.log 2>&1 || true
           cat test-results/diagnostics/browser.log
           exit "$result"
       - name: Preserve diagnostic evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: pr2113-webkit-diagnostics
+          name: pr2113-webkit-native-stacks
           path: |
             test-results/browser
             test-results/diagnostics
