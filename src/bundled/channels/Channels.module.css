@@ -957,7 +957,8 @@ html[data-keyboard-navigation]
   height: 100%;
 }
 
-.temporaryMarker {
+.temporaryMarker,
+.mutedMarker {
   display: inline-flex;
   flex-shrink: 0;
   color: var(--text-subtle);

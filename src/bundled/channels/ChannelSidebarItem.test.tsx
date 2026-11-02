@@ -609,15 +609,22 @@ it("quiets confirmed muted backlog, restores it on unmute, and preserves directe
     <ChannelSidebarItem {...itemProps(state.session, false)} />,
   );
   const row = () => view.container.querySelector("[data-channel-sidebar-row]");
+  const marker = () => screen.queryByRole("img", { name: "Muted" });
   act(() => state.unread(2));
   expect(row()).toHaveAttribute("data-ordinary");
+  expect(marker()).toBeNull();
   act(() => state.mute(true));
   expect(row()).not.toHaveAttribute("data-ordinary");
   expect(view.container.querySelector("[data-channel-unread]")).toBeNull();
+  expect(marker()?.closest("button")).toHaveAttribute(
+    "data-channel-id",
+    "alpha",
+  );
   act(() => state.unread(3));
   expect(row()).not.toHaveAttribute("data-ordinary");
   act(() => state.mute(false));
   expect(row()).toHaveAttribute("data-ordinary");
+  expect(marker()).toBeNull();
   act(() => state.mute(true));
   act(() => state.unread(4, 1));
   expect(row()).not.toHaveAttribute("data-ordinary");

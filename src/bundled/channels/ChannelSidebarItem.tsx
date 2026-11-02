@@ -17,7 +17,10 @@ import {
 } from "../../shared/design-system/ui/Menu";
 import type { ChannelSummary, Profile } from "../../features/relay/contracts";
 import type { RelaySession } from "../../features/relay/session";
-import { ClockIcon } from "../../shared/design-system/icons/index";
+import {
+  BellSlashIcon,
+  ClockIcon,
+} from "../../shared/design-system/icons/index";
 import { channelIcon } from "../../features/channels/channel-icon";
 import { ChannelActivityPopover } from "./ChannelActivityPopover";
 import { channelDurationLabel } from "./ChannelDurationField";
@@ -152,6 +155,7 @@ function ChannelSidebarItemCore({
       ? channel.participants[0]
       : undefined;
   const presence = usePresenceStatus(peer ? session.presence : undefined, peer);
+  const muted = useConfirmedMute(session, channel.id);
   // Keep the closing row's items through the popup's exit transition.
   const lastMenuContent = useRef<ReactNode>(undefined);
   useLayoutEffect(() => {
@@ -228,6 +232,7 @@ function ChannelSidebarItemCore({
               waiting={waiting}
             />
           </span>
+          {muted && <MutedMarker />}
           {channel.ttlSeconds !== undefined && agents.length === 0 && (
             <TemporaryMarker ttlSeconds={channel.ttlSeconds} />
           )}
@@ -310,6 +315,21 @@ function ChannelSidebarItemCore({
         {menuContent ?? lastMenuContent.current}
       </MenuPopup>
     </ContextMenuRoot>
+  );
+}
+
+/** Confirmed mute; unread quieting itself stays with the badge. */
+function MutedMarker() {
+  return (
+    <span
+      className={styles.mutedMarker}
+      data-channel-muted=""
+      role="img"
+      aria-label="Muted"
+      title="Muted"
+    >
+      <BellSlashIcon size={16} />
+    </span>
   );
 }
 
