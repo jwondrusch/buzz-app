@@ -868,10 +868,10 @@ export function ChannelMembersDialog({
         "Unknown member",
     );
   // Filters the fully loaded member list.
+  const memberNeedle = query.trim().toLowerCase();
   const matches = (key: string, name: string) =>
-    `${name} ${key} ${npubEncode(key)}`
-      .toLowerCase()
-      .includes(query.trim().toLowerCase());
+    !memberNeedle ||
+    `${name} ${key} ${npubEncode(key)}`.toLowerCase().includes(memberNeedle);
   // People to add use the shared name rule, like the relay's people page; a
   // whole key or npub finds its owner.
   const addable = (key: string, ...names: (string | undefined)[]) => {
@@ -882,8 +882,13 @@ export function ChannelMembersDialog({
       typed === npubEncode(key)
     );
   };
+  // Label once per member: a fallback label bech32-encodes the key, too costly
+  // to repeat in every comparison of a large roster.
+  const memberLabels = new Map([...members].map((key) => [key, label(key)]));
+  const memberLabel = (key: string) => memberLabels.get(key) ?? label(key);
   const currentMembers = [...members].sort(
-    (a, b) => label(a).localeCompare(label(b)) || a.localeCompare(b),
+    (a, b) =>
+      memberLabel(a).localeCompare(memberLabel(b)) || a.localeCompare(b),
   );
   const groups = ["People", "Agents"].map((name) => {
     const keys = currentMembers.filter((key) => {
@@ -894,7 +899,7 @@ export function ChannelMembersDialog({
     return {
       name,
       count: keys.length,
-      keys: keys.filter((key) => matches(key, label(key))),
+      keys: keys.filter((key) => matches(key, memberLabel(key))),
     };
   });
   const presentGroups = groups.filter((group) => group.count > 0);
@@ -1154,7 +1159,7 @@ export function ChannelMembersDialog({
   // A naming plugin is optional: same-named rows still need a visible difference.
   const shownNames = new Map<string, number>();
   for (const name of [
-    ...currentMembers.map((key) => label(key)),
+    ...currentMembers.map(memberLabel),
     ...visibleCandidates.map((person) => label(person.pubkey, person.name)),
   ])
     shownNames.set(name, (shownNames.get(name) ?? 0) + 1);
@@ -1862,7 +1867,9 @@ export function ChannelMembersDialog({
                       {group.name} · {text ? group.keys.length : group.count}
                     </h3>
                     <ul aria-busy={refreshing}>
-                      {group.keys.map((key) => row(key, label(key), false))}
+                      {group.keys.map((key) =>
+                        row(key, memberLabel(key), false),
+                      )}
                     </ul>
                   </section>
                 ))}
