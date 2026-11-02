@@ -9,6 +9,8 @@ export type AccountAction = Readonly<{
   id: string;
   title: string;
   icon?: ReactNode;
+  /** "status" lists it with Set a status, near the top; otherwise it comes last. */
+  placement?: "status";
   component: ComponentType<{
     open: boolean;
     onOpenChange(open: boolean): void;
@@ -28,6 +30,7 @@ export class AccountActionsService extends Service {
       !action ||
       !/^[a-z0-9][a-z0-9._-]*$/.test(action.id) ||
       !action.title?.trim() ||
+      (action.placement !== undefined && action.placement !== "status") ||
       typeof action.component !== "function"
     )
       throw new Error("An account action needs an id, title and component");

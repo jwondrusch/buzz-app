@@ -223,6 +223,16 @@ export function ProfileButton({
   );
   const [selectedAction, setSelectedAction] =
     useState<RegisteredAccountAction | null>(null);
+  const actionItem = (action: RegisteredAccountAction) => (
+    <MenuItem key={action.key} onClick={() => setSelectedAction(action)}>
+      <MenuIcon>{action.icon ?? <PlugIcon size={17} />}</MenuIcon>
+      {action.title}
+    </MenuItem>
+  );
+  const statusActions = actions.filter(
+    (action) => action.placement === "status",
+  );
+  const endActions = actions.filter((action) => action.placement !== "status");
   const ActionDialog = actions.find(
     (action) => action === selectedAction,
   )?.component;
@@ -456,6 +466,7 @@ export function ProfileButton({
               Status updates are unavailable in this community.
             </p>
           )}
+          {statusActions.map(actionItem)}
           <MenuSeparator />
           <MenuSubmenu>
             <MenuSubmenuTrigger ref={appearanceTrigger}>
@@ -533,16 +544,8 @@ export function ProfileButton({
               </MenuTrailing>
             )}
           </MenuItem>
-          {actions.length > 0 && <MenuSeparator />}
-          {actions.map((action) => (
-            <MenuItem
-              key={action.key}
-              onClick={() => setSelectedAction(action)}
-            >
-              <MenuIcon>{action.icon ?? <PlugIcon size={17} />}</MenuIcon>
-              {action.title}
-            </MenuItem>
-          ))}
+          {endActions.length > 0 && <MenuSeparator />}
+          {endActions.map(actionItem)}
         </MenuPopup>
       </MenuRoot>
       {ActionDialog && (

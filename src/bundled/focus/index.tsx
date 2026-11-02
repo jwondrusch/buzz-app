@@ -128,7 +128,7 @@ export const apply: PluginModule["apply"] = (ctx) => {
   ctx.shortcuts.register({
     id: "toggle",
     title: "Start or end Focus",
-    binding: { key: "f", mod: true, shift: true },
+    binding: { key: "o", mod: true, shift: true },
     allowInEditable: true,
     run: () => {
       if (focus.snapshot().until !== undefined) focus.end();
@@ -139,6 +139,7 @@ export const apply: PluginModule["apply"] = (ctx) => {
     id: "focus",
     title: "Focus",
     icon: <TelescopeIcon size={17} />,
+    placement: "status",
     component: (props) => (
       <FocusDialog {...props} focus={focus} held={held} onReview={review} />
     ),

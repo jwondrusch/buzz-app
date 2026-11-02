@@ -961,6 +961,53 @@ it("opens a contributed account action and removes it when its registration reti
   ).toHaveLength(1);
 });
 
+it("lists a status-placed account action above Appearance, before the rest", async () => {
+  const user = userEvent.setup();
+  const profile = { profile: { name: "Fixture", picture: "" }, viewer: null };
+  const presence = { status: "online", preference: "auto", error: null };
+  const subscribe = () => () => {};
+  const connection = { status: "unavailable", session: undefined, scope: "" };
+  const communities = {
+    subscribe,
+    snapshot: () => profile,
+    presence: { subscribe, snapshot: () => presence },
+    relay: { subscribe, snapshot: () => connection },
+  } as unknown as Communities;
+  const component = () => null;
+  const actions = [
+    { key: "a/feedback", pluginId: "a", title: "Send feedback", component },
+    {
+      key: "b/focus",
+      pluginId: "b",
+      title: "Focus",
+      placement: "status",
+      component,
+    },
+  ];
+  const accountActions = {
+    subscribe,
+    snapshot: () => actions,
+  } as unknown as AccountActionsService;
+  render(
+    <ProfileButton
+      communities={communities}
+      accountActions={accountActions}
+      appearance={testAppearance}
+      settingsSelected={false}
+      onSettings={() => {}}
+    />,
+  );
+  await user.click(screen.getByRole("button", { name: "Your profile" }));
+  const menu = await screen.findByRole("menu", { name: "Fixture" });
+  const names = within(menu)
+    .getAllByRole("menuitem")
+    .map((item) => item.textContent);
+  expect(names.indexOf("Focus")).toBeLessThan(names.indexOf("Appearance"));
+  expect(names.indexOf("Send feedback")).toBeGreaterThan(
+    names.indexOf("Settings"),
+  );
+});
+
 async function statusFeedbackFixture(disconnected = false) {
   const listeners = new Set<() => void>();
   let observed = "online";
