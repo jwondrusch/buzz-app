@@ -24,6 +24,7 @@ function registered() {
     panels: {},
     agents: {},
     communityReader: {},
+    reflect: { get: () => undefined },
   } as unknown as Parameters<typeof apply>[0]);
   return new Map(
     shortcuts.register.mock.calls.map(([shortcut]) => [shortcut.id, shortcut]),
