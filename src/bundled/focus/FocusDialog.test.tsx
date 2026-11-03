@@ -3,13 +3,9 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
-import {
-  FOCUS_DURATION_KEY,
-  FOCUS_MODE_KEY,
-  FocusDialog,
-  lastFocusMode,
-} from "./FocusDialog";
+import { FocusDialog } from "./FocusDialog";
 import { createHeld } from "./held";
+import { createPreferences } from "./preferences";
 import { createFocus } from "./state";
 
 afterEach(() => {
@@ -28,6 +24,7 @@ it("starts Focus for the chosen duration and offers End while it is on", async (
       onOpenChange={onOpenChange}
       focus={focus}
       held={held}
+      preferences={createPreferences()}
       onReview={() => {}}
     />
   );
@@ -42,7 +39,6 @@ it("starts Focus for the chosen duration and offers End while it is on", async (
   expect(until - before).toBeGreaterThanOrEqual(1799);
   expect(until - before).toBeLessThanOrEqual(1801);
   expect(onOpenChange).toHaveBeenLastCalledWith(false);
-  expect(localStorage.getItem(FOCUS_DURATION_KEY)).toBe("1800");
   view.rerender(dialog);
   expect(screen.getByText(/^Focusing until/)).toBeVisible();
   await user.click(screen.getByRole("button", { name: "End focus" }));
@@ -50,15 +46,17 @@ it("starts Focus for the chosen duration and offers End while it is on", async (
   focus.dispose();
 });
 
-it("starts in the chosen mode and remembers it for next time", async () => {
+it("starts in the chosen mode without changing the default", async () => {
   const user = userEvent.setup();
   const focus = createFocus();
+  const preferences = createPreferences();
   const dialog = (
     <FocusDialog
       open
       onOpenChange={() => {}}
       focus={focus}
       held={createHeld()}
+      preferences={preferences}
       onReview={() => {}}
     />
   );
@@ -70,8 +68,7 @@ it("starts in the chosen mode and remembers it for next time", async () => {
   expect(screen.getByText(/Search and links still open/)).toBeVisible();
   await user.click(screen.getByRole("button", { name: "Start focus" }));
   expect(focus.snapshot().mode).toBe("sidebar");
-  expect(localStorage.getItem(FOCUS_MODE_KEY)).toBe("sidebar");
-  expect(lastFocusMode()).toBe("sidebar");
+  expect(preferences.snapshot().mode).toBe("isolated");
   view.rerender(dialog);
   expect(screen.getByText(/^Focusing until/)).toHaveTextContent(
     "Search and links still open",
@@ -89,6 +86,7 @@ it("rejects a custom end time that has already passed", async () => {
       onOpenChange={() => {}}
       focus={focus}
       held={held}
+      preferences={createPreferences()}
       onReview={() => {}}
     />,
   );
@@ -105,9 +103,10 @@ it("rejects a custom end time that has already passed", async () => {
   focus.dispose();
 });
 
-it("starts from the last duration and links to waiting alerts", async () => {
+it("starts from the defaults in Settings and links to waiting alerts", async () => {
   const user = userEvent.setup();
-  localStorage.setItem(FOCUS_DURATION_KEY, "7200");
+  const preferences = createPreferences();
+  preferences.set({ length: "7200", mode: "sidebar" });
   const focus = createFocus();
   const held = createHeld();
   held.add({
@@ -126,11 +125,15 @@ it("starts from the last duration and links to waiting alerts", async () => {
       onOpenChange={onOpenChange}
       focus={focus}
       held={held}
+      preferences={preferences}
       onReview={onReview}
     />,
   );
   expect(
     screen.getByRole("button", { name: "Duration: 2 hours" }),
+  ).toBeVisible();
+  expect(
+    screen.getByRole("button", { name: "Mode: Quiet sidebar" }),
   ).toBeVisible();
   await user.click(
     screen.getByRole("button", { name: "Review 1 alert waiting" }),

@@ -6,9 +6,8 @@ Work with your agents without the rest of Buzz competing for attention.
 
 1. Open the menu under your profile picture and choose **Focus**.
 2. Pick a mode and how long, from 30 minutes to the rest of today or a custom
-   end time, then choose **Start focus**. Or press ⌘⇧O (Ctrl+Shift+O) to start
-   Focus with the last mode and length you chose, and again to end it. You
-   can change the shortcut in **Settings → Shortcuts**.
+   end time, then choose **Start focus**. Or press ⌥F (Alt+F) to focus for an
+   hour, and again to end it.
 3. The sidebar now shows only your Solo chats, and only they can show banners,
    play sounds or light the Dock dot. Your status becomes 🔭 Focusing.
    - **Solo only**: search and links reach only Solo chats too.
@@ -31,3 +30,6 @@ Work with your agents without the rest of Buzz competing for attention.
 - If Focus ended while Buzz was closed, the summary comes once you reconnect.
 - Turning the plugin off ends Focus and restores your earlier status. Quitting
   Buzz keeps Focus on for next time.
+- **Settings → Plugins → Focus** sets the mode and length the dialog starts
+  with, and how long the shortcut focuses for. Change the shortcut's keys in
+  **Settings → Shortcuts**.

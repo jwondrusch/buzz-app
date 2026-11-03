@@ -1,14 +1,10 @@
 import type { PluginModule } from "../../plugins/api";
 import { TelescopeIcon } from "../../shared/design-system/icons/index";
-import {
-  FocusBanner,
-  FocusDialog,
-  lastFocusDuration,
-  lastFocusMode,
-  startFocus,
-} from "./FocusDialog";
+import { FocusBanner, FocusDialog, startFocus } from "./FocusDialog";
+import { FocusSettings } from "./FocusSettings";
 import { createHeld } from "./held";
 import { HELD_PAGE, HeldPage } from "./HeldPage";
+import { createPreferences } from "./preferences";
 import { createFocus, type FocusMode } from "./state";
 import { bindFocusStatus, soloConversation } from "./status";
 
@@ -20,12 +16,14 @@ export const inject = [
   "pages",
   "navigation",
   "shortcuts",
+  "settingsCards",
 ];
 
 export const apply: PluginModule["apply"] = (ctx) => {
   const relay = ctx.relay;
   const navigation = ctx.navigation;
   const focus = createFocus();
+  const preferences = createPreferences();
   const held = createHeld(undefined, {
     viewer: () => relay.snapshot().viewer,
     subscribe: relay.subscribe,
@@ -47,6 +45,7 @@ export const apply: PluginModule["apply"] = (ctx) => {
       } finally {
         focus.dispose();
         held.dispose();
+        preferences.dispose();
       }
     };
   });
@@ -128,11 +127,18 @@ export const apply: PluginModule["apply"] = (ctx) => {
   ctx.shortcuts.register({
     id: "toggle",
     title: "Start or end Focus",
-    binding: { key: "o", mod: true, shift: true },
+    // Option types "ƒ" on a US Mac layout, so the key is listed both ways.
+    binding: [
+      { key: "f", alt: true },
+      { key: "ƒ", alt: true },
+    ],
     allowInEditable: true,
     run: () => {
       if (focus.snapshot().until !== undefined) focus.end();
-      else startFocus(focus, lastFocusDuration(), lastFocusMode());
+      else {
+        const { shortcutLength, mode } = preferences.snapshot();
+        startFocus(focus, shortcutLength, mode);
+      }
     },
   });
   ctx.accountActions.register({
@@ -141,7 +147,22 @@ export const apply: PluginModule["apply"] = (ctx) => {
     icon: <TelescopeIcon size={17} />,
     placement: "status",
     component: (props) => (
-      <FocusDialog {...props} focus={focus} held={held} onReview={review} />
+      <FocusDialog
+        {...props}
+        focus={focus}
+        held={held}
+        preferences={preferences}
+        onReview={review}
+      />
+    ),
+  });
+  ctx.settingsCards.register({
+    id: "focus",
+    title: "Focus",
+    group: "Plugins",
+    icon: TelescopeIcon,
+    component: ({ active }) => (
+      <FocusSettings preferences={preferences} active={active} />
     ),
   });
 };

@@ -13,65 +13,29 @@ import {
 import { StatusExpiration } from "../../features/user-status/StatusExpiration";
 import { statusDeadline } from "../../features/user-status/status-duration";
 import type { Held } from "./held";
+import {
+  type FocusLength,
+  focusLengths,
+  focusModes,
+  type Preferences,
+} from "./preferences";
 import type { Focus, FocusMode } from "./state";
 import styles from "./Focus.module.css";
 
-export const focusDurations = [
-  ["1800", "30 minutes"],
-  ["3600", "1 hour"],
-  ["7200", "2 hours"],
-  ["today", "Rest of today"],
+const focusDurations: readonly (readonly [Duration, string])[] = [
+  ...focusLengths,
   ["custom", "Custom"],
-] as const;
-type Duration = (typeof focusDurations)[number][0];
-type Preset = Exclude<Duration, "custom">;
-
-/** The last preset chosen, which the shortcut reuses. */
-export const FOCUS_DURATION_KEY = "buzz-focus-duration.v1";
-export function lastFocusDuration(): Preset {
-  try {
-    const value = globalThis.localStorage?.getItem(FOCUS_DURATION_KEY);
-    if (
-      focusDurations.some(([preset]) => preset === value && value !== "custom")
-    )
-      return value as Preset;
-  } catch {}
-  return "3600";
-}
-function rememberFocusDuration(duration: Preset) {
-  try {
-    globalThis.localStorage?.setItem(FOCUS_DURATION_KEY, duration);
-  } catch {}
-}
-export const focusModes = [
-  ["isolated", "Solo only"],
-  ["sidebar", "Quiet sidebar"],
-] as const;
+];
+type Duration = FocusLength | "custom";
 const modeHelp: Record<FocusMode, string> = {
   isolated:
     "Only Solo chats are shown and open. Other alerts are saved for when you're ready.",
   sidebar:
     "Only Solo chats are shown in the sidebar and alert you. Search and links still open anything else.",
 };
-/** The last mode chosen, which the shortcut reuses. */
-export const FOCUS_MODE_KEY = "buzz-focus-mode.v1";
-export function lastFocusMode(): FocusMode {
-  try {
-    if (globalThis.localStorage?.getItem(FOCUS_MODE_KEY) === "sidebar")
-      return "sidebar";
-  } catch {}
-  return "isolated";
-}
-function rememberFocusMode(mode: FocusMode) {
-  try {
-    globalThis.localStorage?.setItem(FOCUS_MODE_KEY, mode);
-  } catch {}
-}
 /** Start Focus for a preset; the shortcut and the dialog share it. */
-export function startFocus(focus: Focus, duration: Preset, mode: FocusMode) {
-  focus.start(statusDeadline(duration, Math.floor(Date.now() / 1000)), mode);
-  rememberFocusDuration(duration);
-  rememberFocusMode(mode);
+export function startFocus(focus: Focus, length: FocusLength, mode: FocusMode) {
+  focus.start(statusDeadline(length, Math.floor(Date.now() / 1000)), mode);
 }
 
 export function useHeldCount(held: Held) {
@@ -122,19 +86,26 @@ export function FocusDialog({
   onOpenChange,
   focus,
   held,
+  preferences,
   onReview,
 }: {
   open: boolean;
   onOpenChange(open: boolean): void;
   focus: Focus;
   held: Held;
+  preferences: Preferences;
   /** Opens the held alerts page. */
   onReview(): void;
 }) {
   const state = useFocus(focus);
   const count = useHeldCount(held);
-  const [duration, setDuration] = useState<Duration>(lastFocusDuration);
-  const [mode, setMode] = useState<FocusMode>(lastFocusMode);
+  // Each opening starts from the defaults in Settings.
+  const [duration, setDuration] = useState<Duration>(
+    () => preferences.snapshot().length,
+  );
+  const [mode, setMode] = useState<FocusMode>(
+    () => preferences.snapshot().mode,
+  );
   const [custom, setCustom] = useState(() => {
     const date = new Date(Date.now() + 3600_000);
     date.setMinutes(date.getMinutes() < 30 ? 30 : 60, 0, 0);
@@ -145,10 +116,9 @@ export function FocusDialog({
   const on = state.until !== undefined;
   const start = () => {
     try {
-      if (duration === "custom") {
+      if (duration === "custom")
         focus.start(Math.floor(custom.getTime() / 1000), mode);
-        rememberFocusMode(mode);
-      } else startFocus(focus, duration, mode);
+      else startFocus(focus, duration, mode);
       close();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));

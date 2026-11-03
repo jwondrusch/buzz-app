@@ -15,6 +15,7 @@ import { createNotificationPreferences } from "../../features/notifications/pref
 import { NotificationsService } from "../../features/notifications/service";
 import { PagesService } from "../../features/pages/service";
 import type { StatusInput, UserStatus } from "../../features/relay/user-status";
+import { SettingsCardsService } from "../../features/settings/service";
 import { ShortcutsService } from "../../features/shortcuts/service";
 import { PluginRuntime } from "../../plugins/runtime";
 import * as focusPlugin from "./index";
@@ -60,7 +61,8 @@ function setup(initial?: StatusInput) {
   );
   notifications.selectViewer(scope.viewer);
   const pages = new PagesService(ctx);
-  new ShortcutsService(ctx, undefined);
+  const shortcuts = new ShortcutsService(ctx, undefined);
+  const settingsCards = new SettingsCardsService(ctx);
   let published: UserStatus | undefined = initial && {
     ...initial,
     userId: scope.viewer,
@@ -122,6 +124,8 @@ function setup(initial?: StatusInput) {
     pages,
     notifications,
     sidebarScope,
+    shortcuts,
+    settingsCards,
     accountActions,
     alert: (sourceKey: string, channelId: string) =>
       notifications.admit(
@@ -166,6 +170,47 @@ it("resumes a saved Focus, lets only Solo alert, and releases everything on End"
   expect(t.sidebarScope.snapshot()).toEqual([]);
   expect(t.notifications.gated(conversation("team"))).toBe(true);
   expect(localStorage.getItem(FOCUS_KEY)).toBeNull();
+});
+
+it("⌥F starts Focus for the shortcut length and mode set in Settings", async () => {
+  const t = setup();
+  t.enable();
+  await vi.waitFor(() =>
+    expect(t.settingsCards.snapshot().map((card) => card.title)).toEqual([
+      "Focus",
+    ]),
+  );
+  const shortcut = t.shortcuts.snapshot().find((item) => item.id === "toggle");
+  expect(shortcut?.binding).toEqual([
+    { key: "f", alt: true },
+    { key: "ƒ", alt: true },
+  ]);
+  const before = Math.floor(Date.now() / 1000);
+  act(() => shortcut?.run());
+  // One hour unless Settings says otherwise.
+  const until = focusUntil();
+  expect(until - before).toBeGreaterThanOrEqual(3599);
+  expect(until - before).toBeLessThanOrEqual(3601);
+  expect(JSON.parse(localStorage.getItem(FOCUS_KEY) ?? "{}").mode).toBe(
+    "isolated",
+  );
+  act(() => shortcut?.run());
+  expect(localStorage.getItem(FOCUS_KEY)).toBeNull();
+  const Card = t.settingsCards.snapshot()[0]?.component;
+  if (!Card) throw new Error("No settings card");
+  render(<Card active={() => true} />);
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("combobox", { name: /Shortcut length/ }));
+  await user.click(await screen.findByRole("option", { name: "2 hours" }));
+  await user.click(screen.getByRole("combobox", { name: /^Mode/ }));
+  await user.click(
+    await screen.findByRole("option", { name: "Quiet sidebar" }),
+  );
+  act(() => shortcut?.run());
+  expect(focusUntil() - before).toBeGreaterThanOrEqual(7199);
+  expect(JSON.parse(localStorage.getItem(FOCUS_KEY) ?? "{}").mode).toBe(
+    "sidebar",
+  );
 });
 
 it("Quiet sidebar hides the rest of the sidebar but lets it open", async () => {
@@ -290,3 +335,7 @@ it("says how many alerts wait when Focus ended while Buzz was closed", async () 
   await vi.waitFor(() => expect(localStorage.getItem(HELD_DUE_KEY)).toBeNull());
   expect(localStorage.getItem(HELD_KEY)).not.toBeNull();
 });
+
+function focusUntil(): number {
+  return JSON.parse(localStorage.getItem(FOCUS_KEY) ?? "{}").until ?? 0;
+}
