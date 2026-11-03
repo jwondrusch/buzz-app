@@ -22,6 +22,20 @@ export const HELD_PAGE = Object.freeze({
   pageId: "held",
 } as const);
 
+// Alerts held together can match in time and text, so each saved alert gets
+// its own key for as long as it is listed.
+const keys = new WeakMap<KeptAlert, number>();
+let nextKey = 0;
+function keyOf(item: KeptAlert) {
+  let key = keys.get(item);
+  if (key === undefined) {
+    nextKey += 1;
+    key = nextKey;
+    keys.set(item, key);
+  }
+  return key;
+}
+
 /** Alerts Focus kept for later. Opening one removes it from the list. In
  * Solo only mode they open once Focus ends, since it keeps their
  * conversations closed; Quiet sidebar lets them open any time. */
@@ -78,7 +92,7 @@ export function HeldPage({
         {items.length ? (
           <ul className={styles.list} aria-label="Held alerts">
             {items.map((item) => (
-              <li key={`${item.at}:${item.title}:${item.body}`}>
+              <li key={keyOf(item)}>
                 <NavigationItem
                   multiline
                   disabled={focusing}

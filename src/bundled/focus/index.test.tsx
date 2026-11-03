@@ -241,11 +241,16 @@ it("disabling the plugin mid-Focus releases everything and restores the earlier 
       expect.objectContaining(FOCUS_STATUS),
     ),
   );
+  // A held alert would otherwise earn a "Focus ended" summary.
+  expect(await t.alert("team-1", "team")).toBe(false);
   act(() => t.disable());
   await vi.waitFor(() => expect(t.save).toHaveBeenLastCalledWith(lunch));
   expect(t.sidebarScope.snapshot()).toEqual([]);
   expect(t.notifications.gated(conversation("team"))).toBe(true);
-  expect(localStorage.getItem(FOCUS_KEY)).toBeNull();
+  await vi.waitFor(() => expect(localStorage.getItem(FOCUS_KEY)).toBeNull());
+  // The gate stops listening before the status cleanup ends Focus, so no
+  // summary follows; the status restore settling is the later barrier.
+  expect(t.show).not.toHaveBeenCalled();
 });
 
 it("closing the app keeps Focus and its status for next time", async () => {

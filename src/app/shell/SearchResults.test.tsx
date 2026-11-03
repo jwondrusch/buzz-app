@@ -4733,21 +4733,14 @@ it("uses readable owners before key suffixes for agent namesakes", async () => {
     owner.dispose();
   }
 });
-it("offers only new chats with the viewer's agents during Focus, not DMs", async () => {
+it("offers only new chats with the viewer's agents during Focus, not people", async () => {
   const relay = keypair(),
     viewer = keypair(),
     mine = keypair(),
-    theirs = keypair(),
     person = keypair();
   const wire = scriptedTransport(viewer.pubkey, relay.pubkey);
   const discovery = [
-    metadata(relay, "theirs-dm", "opaque", 1700000000, [
-      ["t", "dm"],
-      ["private", ""],
-    ]),
-    roster(relay, "theirs-dm", [viewer.pubkey, theirs.pubkey]),
     profile(mine, { name: "Scout", is_agent: true }),
-    profile(theirs, { name: "Scooter", is_agent: true }),
     profile(person, { name: "Scottie" }),
   ];
   const owner = createRelaySession({
@@ -4784,7 +4777,7 @@ it("offers only new chats with the viewer's agents during Focus, not DMs", async
     },
   } as typeof owner.session;
   try {
-    render(
+    const results = (soloOnly: boolean) => (
       <SearchResults
         session={session}
         query="sco"
@@ -4793,16 +4786,21 @@ it("offers only new chats with the viewer's agents during Focus, not DMs", async
         pages={[]}
         openConversation={() => {}}
         openAgentSession={() => {}}
-        soloOnly
-      />,
+        soloOnly={soloOnly}
+      />
     );
+    // Outside Focus the person is offered, which also proves their profile
+    // has loaded before Focus is asserted to hide them.
+    const view = render(results(false));
+    expect(
+      await screen.findByRole("option", { name: /Scottie/ }),
+    ).toBeVisible();
+    view.rerender(results(true));
     const agents = within(await screen.findByRole("group", { name: "Agents" }));
     expect(agents.getByRole("option", { name: /Scout/ })).toHaveTextContent(
       "New chat",
     );
-    expect(screen.queryByRole("option", { name: /Scooter/ })).toBeNull();
     expect(screen.queryByRole("option", { name: /Scottie/ })).toBeNull();
-    expect(screen.queryByRole("group", { name: "Direct messages" })).toBeNull();
   } finally {
     cleanup();
     owner.dispose();

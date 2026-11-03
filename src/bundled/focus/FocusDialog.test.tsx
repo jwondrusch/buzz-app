@@ -11,6 +11,7 @@ import { createFocus } from "./state";
 afterEach(() => {
   cleanup();
   localStorage.clear();
+  vi.restoreAllMocks();
 });
 
 it("starts Focus for the chosen duration and offers End while it is on", async () => {
@@ -33,11 +34,11 @@ it("starts Focus for the chosen duration and offers End while it is on", async (
   await user.click(
     await screen.findByRole("menuitemradio", { name: "30 minutes" }),
   );
-  const before = Math.floor(Date.now() / 1000);
+  // Hold the clock so the deadline is exact.
+  const now = Date.now();
+  vi.spyOn(Date, "now").mockReturnValue(now);
   await user.click(screen.getByRole("button", { name: "Start focus" }));
-  const until = focus.snapshot().until ?? 0;
-  expect(until - before).toBeGreaterThanOrEqual(1799);
-  expect(until - before).toBeLessThanOrEqual(1801);
+  expect(focus.snapshot().until).toBe(Math.floor(now / 1000) + 1800);
   expect(onOpenChange).toHaveBeenLastCalledWith(false);
   view.rerender(dialog);
   expect(screen.getByText(/^Focusing until/)).toBeVisible();
@@ -99,7 +100,6 @@ it("rejects a custom end time that has already passed", async () => {
   await user.click(screen.getByRole("button", { name: "Start focus" }));
   expect(screen.getByRole("alert")).toHaveTextContent("future");
   expect(focus.snapshot().until).toBeUndefined();
-  vi.restoreAllMocks();
   focus.dispose();
 });
 
